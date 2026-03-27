@@ -35,7 +35,6 @@ jobs:
 
       - name: 🚀 Build APK
         id: build_apk
-        working-directory: reader
         run: |
           # Ensure repo-level node_modules bin is on PATH
           export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"

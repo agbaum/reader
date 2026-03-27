@@ -35,7 +35,7 @@ jobs:
 
       - name: 🚀 Build APK
         id: build_apk
-        working-directory: artifacts/rss-reader
+        working-directory: reader
         run: |
           # Ensure repo-level node_modules bin is on PATH
           export PATH="$GITHUB_WORKSPACE/node_modules/.bin:$PATH"
@@ -47,6 +47,6 @@ jobs:
         with:
           tag_name: v${{ github.run_number }}
           name: Release v${{ github.run_number }}
-          files: artifacts/rss-reader/app-release.apk
+          files: artifacts/reader/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

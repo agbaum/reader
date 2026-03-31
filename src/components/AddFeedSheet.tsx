@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
+import { OPMLImportSheet } from "./OPMLImportSheet";
 
 const SAMPLE_FEEDS = [
   { name: "The Verge", url: "https://www.theverge.com/rss/index.xml" },
@@ -35,6 +36,7 @@ export function AddFeedSheet({ visible, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showOPMLImport, setShowOPMLImport] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   const handleAdd = useCallback(async () => {
@@ -143,6 +145,17 @@ export function AddFeedSheet({ visible, onClose }: Props) {
           )}
         </Pressable>
 
+        <Pressable
+          onPress={() => setShowOPMLImport(true)}
+          style={({ pressed }) => [
+            styles.opmlBtn,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Feather name="upload" size={16} color={Colors.light.textSecondary} />
+          <Text style={styles.opmlBtnText}>Import OPML</Text>
+        </Pressable>
+
         <View style={styles.suggestions}>
           <Text style={styles.suggestionsLabel}>Popular feeds</Text>
           {SAMPLE_FEEDS.map((s) => (
@@ -169,6 +182,14 @@ export function AddFeedSheet({ visible, onClose }: Props) {
           ))}
         </View>
       </KeyboardAvoidingView>
+
+      <OPMLImportSheet
+        visible={showOPMLImport}
+        onClose={() => {
+          setShowOPMLImport(false);
+          onClose();
+        }}
+      />
     </Modal>
   );
 }
@@ -235,6 +256,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
     color: "#fff",
+  },
+  opmlBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.light.border,
+    borderRadius: 12,
+    height: 50,
+    marginBottom: 32,
+  },
+  opmlBtnText: {
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.light.textSecondary,
   },
   suggestions: {
     gap: 4,

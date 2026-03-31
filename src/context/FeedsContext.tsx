@@ -37,6 +37,7 @@ interface FeedsContextValue {
   articles: Article[];
   isRefreshing: boolean;
   addFeed: (url: string) => Promise<{ success: boolean; error?: string }>;
+  addMultipleFeeds: (urls: string[]) => Promise<{ success: number; failed: number }>;
   removeFeed: (id: string) => void;
   markAsRead: (articleId: string) => void;
   markAllAsRead: (feedId?: string) => void;
@@ -346,6 +347,59 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     [feeds, articles, saveFeeds, saveArticles]
   );
 
+  const addMultipleFeeds = useCallback(
+    async (urls: string[]): Promise<{ success: number; failed: number }> => {
+      let successCount = 0;
+      let failedCount = 0;
+      let currentFeeds = [...feeds];
+      let currentArticles = [...articles];
+
+      for (const url of urls) {
+        const trimmed = url.trim();
+        if (!trimmed || currentFeeds.find((f) => f.url === trimmed)) {
+          failedCount++;
+          continue;
+        }
+
+        const result = await fetchFeedData(trimmed);
+        if (!result) {
+          failedCount++;
+          continue;
+        }
+
+        const newFeed: Feed = {
+          id: generateId(),
+          url: trimmed,
+          title: result.feed.title ?? new URL(trimmed).hostname,
+          description: result.feed.description,
+          lastFetched: Date.now(),
+        };
+
+        const newArticles: Article[] = result.articles.map((a) => ({
+          ...a,
+          id: generateId(),
+          feedId: newFeed.id,
+          feedTitle: newFeed.title,
+          feedUrl: trimmed,
+          title: a.title ?? "Untitled",
+          url: a.url ?? "",
+          isRead: false,
+          publishedAt: a.publishedAt ?? Date.now(),
+        }));
+
+        currentFeeds.push(newFeed);
+        currentArticles = [...newArticles, ...currentArticles];
+        successCount++;
+      }
+
+      const sorted = currentArticles.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
+      await saveFeeds(currentFeeds);
+      await saveArticles(sorted);
+      return { success: successCount, failed: failedCount };
+    },
+    [feeds, articles, saveFeeds, saveArticles]
+  );
+
   const removeFeed = useCallback(
     async (id: string) => {
       const updatedFeeds = feeds.filter((f) => f.id !== id);
@@ -486,6 +540,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         articles: articlesWithState,
         isRefreshing,
         addFeed,
+        addMultipleFeeds,
         removeFeed,
         markAsRead,
         markAllAsRead,

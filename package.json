@@ -20,6 +20,7 @@
     "expo": "~55.0.8",
     "expo-constants": "~55.0.9",
     "expo-device": "~55.0.10",
+    "expo-document-picker": "^55.0.9",
     "expo-font": "~55.0.4",
     "expo-glass-effect": "~55.0.8",
     "expo-google-fonts": "^0.0.0",
@@ -45,6 +46,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~55.0.0",
     "typescript": "~5.9.2"
   },
   "private": true

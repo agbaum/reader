@@ -54,3 +54,9 @@ Read state is stored separately from articles to allow fast mark-as-read without
 - No tests exist
 - The README is the default Expo template — it's not project docs
 - Article list has no pagination; this is acceptable at current scale
+
+## Pushing Changes
+
+- Before pushing changes:
+  - increase the app version
+  - run `pnpm install` to update the lock file

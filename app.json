@@ -2,7 +2,7 @@
   "expo": {
     "name": "reader",
     "slug": "reader",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "reader",
@@ -19,8 +19,9 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
       "package": "com.akpgreentree.reader",
-      "versionCode": 6
+      "versionCode": 7
     },
     "web": {
       "output": "static",

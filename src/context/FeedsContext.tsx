@@ -1,11 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  ReactNode,
+    createContext,
+    ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useState,
 } from "react";
 import { Platform } from "react-native";
 
@@ -37,7 +37,7 @@ interface FeedsContextValue {
   articles: Article[];
   isRefreshing: boolean;
   addFeed: (url: string) => Promise<{ success: boolean; error?: string }>;
-  addMultipleFeeds: (urls: string[]) => Promise<{ success: number; failed: number }>;
+  addMultipleFeeds: (urls: string[]) => Promise<{ success: number; failed: number; failedUrls: string[] }>;
   removeFeed: (id: string) => void;
   markAsRead: (articleId: string) => void;
   markAllAsRead: (feedId?: string) => void;
@@ -69,7 +69,15 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        Accept: "application/rss+xml, application/atom+xml, */*",
+        "Accept-Encoding": "gzip, deflate",
+      },
+    });
     return response;
   } finally {
     clearTimeout(id);
@@ -78,9 +86,10 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
 
 async function fetchFeedData(
   url: string
-): Promise<{ feed: Partial<Feed>; articles: Partial<Article>[] } | null> {
+): Promise<{ feed: Partial<Feed>; articles: Partial<Article>[]; canonicalUrl: string } | null> {
   try {
     let xml: string;
+    let redirectUrl = url;
 
     if (Platform.OS === "web") {
       // Browser needs a CORS proxy
@@ -93,6 +102,7 @@ async function fetchFeedData(
       // React Native fetches directly — no CORS restriction on device
       const response = await fetchWithTimeout(url, 15000);
       if (!response.ok) throw new Error(`Network error: ${response.status}`);
+      redirectUrl = response.url || url; // final URL after any HTTP redirects
       xml = await response.text();
     }
 
@@ -100,7 +110,17 @@ async function fetchFeedData(
 
     const isAtom = xml.includes("<feed");
     const isRss = xml.includes("<rss") || xml.includes("<channel");
-    if (!isAtom && !isRss) throw new Error("Not a valid RSS/Atom feed");
+    const isSitemap = xml.includes("<urlset") || xml.includes("<sitemap");
+    if (!isAtom && !isRss) {
+      if (isSitemap) {
+        console.warn(`Skipping sitemap URL: ${url}`);
+        return null;
+      }
+      // Log first 200 chars to debug what was actually returned
+      const preview = xml.substring(0, 200);
+      console.error(`Invalid feed format from ${url}: ${preview}`);
+      throw new Error("Not a valid RSS/Atom feed");
+    }
 
     const getTagContent = (text: string, tag: string): string => {
       const patterns = [
@@ -193,14 +213,28 @@ async function fetchFeedData(
       };
     });
 
+    // Prefer atom:link rel="self" as the canonical URL, fall back to redirect URL
+    const xmlHeader = xml.split(/<(?:item|entry)[\s>]/i)[0] ?? xml;
+    const selfLink =
+      xmlHeader.match(/<(?:atom:)?link[^>]+rel=["']self["'][^>]+href=["']([^"']+)["']/i)?.[1] ??
+      xmlHeader.match(/<(?:atom:)?link[^>]+href=["']([^"']+)["'][^>]+rel=["']self["']/i)?.[1];
+    const canonicalUrl = selfLink ?? redirectUrl;
+
     return {
       feed: {
         title: feedTitle || new URL(url).hostname,
         description: feedDesc || undefined,
       },
       articles,
+      canonicalUrl,
     };
   } catch (e) {
+    // If an http:// URL failed, retry with https://
+    if (url.startsWith("http://")) {
+      const httpsUrl = "https://" + url.slice(7);
+      console.log(`Retrying with HTTPS: ${httpsUrl}`);
+      return fetchFeedData(httpsUrl);
+    }
     console.error("Feed fetch error:", e);
     return null;
   }
@@ -259,6 +293,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
 
               const updatedFeed = {
                 ...feed,
+                url: result.canonicalUrl,
                 title: result.feed.title ?? feed.title,
                 lastFetched: Date.now(),
               };
@@ -317,8 +352,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
 
       const newFeed: Feed = {
         id: generateId(),
-        url: trimmed,
-        title: result.feed.title ?? new URL(trimmed).hostname,
+        url: result.canonicalUrl,
+        title: result.feed.title ?? new URL(result.canonicalUrl).hostname,
         description: result.feed.description,
         lastFetched: Date.now(),
       };
@@ -328,7 +363,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         id: generateId(),
         feedId: newFeed.id,
         feedTitle: newFeed.title,
-        feedUrl: trimmed,
+        feedUrl: result.canonicalUrl,
         title: a.title ?? "Untitled",
         url: a.url ?? "",
         isRead: false,
@@ -348,54 +383,60 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   );
 
   const addMultipleFeeds = useCallback(
-    async (urls: string[]): Promise<{ success: number; failed: number }> => {
+    async (urls: string[]): Promise<{ success: number; failed: number; failedUrls: string[] }> => {
+      const existingUrls = new Set(feeds.map((f) => f.url));
+
+      // Filter to only new, non-empty, unique URLs before fetching
+      const toFetch = [...new Set(urls.map((u) => u.trim()).filter((u) => u && !existingUrls.has(u)))];
+      const skipped = urls.length - toFetch.length;
+
+      // Fetch all feeds in parallel
+      const results = await Promise.all(
+        toFetch.map(async (url) => ({ url, result: await fetchFeedData(url) }))
+      );
+
       let successCount = 0;
-      let failedCount = 0;
-      let currentFeeds = [...feeds];
-      let currentArticles = [...articles];
+      const failedUrls: string[] = [];
+      const newFeeds: Feed[] = [];
+      let newArticles: Article[] = [];
 
-      for (const url of urls) {
-        const trimmed = url.trim();
-        if (!trimmed || currentFeeds.find((f) => f.url === trimmed)) {
-          failedCount++;
-          continue;
-        }
-
-        const result = await fetchFeedData(trimmed);
+      for (const { url, result } of results) {
         if (!result) {
-          failedCount++;
+          failedUrls.push(url);
           continue;
         }
 
         const newFeed: Feed = {
           id: generateId(),
-          url: trimmed,
-          title: result.feed.title ?? new URL(trimmed).hostname,
+          url: result.canonicalUrl,
+          title: result.feed.title ?? new URL(result.canonicalUrl).hostname,
           description: result.feed.description,
           lastFetched: Date.now(),
         };
 
-        const newArticles: Article[] = result.articles.map((a) => ({
+        const feedArticles: Article[] = result.articles.map((a) => ({
           ...a,
           id: generateId(),
           feedId: newFeed.id,
           feedTitle: newFeed.title,
-          feedUrl: trimmed,
+          feedUrl: result.canonicalUrl,
           title: a.title ?? "Untitled",
           url: a.url ?? "",
           isRead: false,
           publishedAt: a.publishedAt ?? Date.now(),
         }));
 
-        currentFeeds.push(newFeed);
-        currentArticles = [...newArticles, ...currentArticles];
+        newFeeds.push(newFeed);
+        newArticles = [...feedArticles, ...newArticles];
         successCount++;
       }
 
-      const sorted = currentArticles.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
-      await saveFeeds(currentFeeds);
+      const sorted = [...newArticles, ...articles].sort(
+        (a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)
+      );
+      await saveFeeds([...feeds, ...newFeeds]);
       await saveArticles(sorted);
-      return { success: successCount, failed: failedCount };
+      return { success: successCount, failed: failedUrls.length, failedUrls };
     },
     [feeds, articles, saveFeeds, saveArticles]
   );
@@ -465,7 +506,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       setFeeds((currentFeeds) => {
         const updated = currentFeeds.map((f) =>
           f.id === feedId
-            ? { ...f, title: result.feed.title ?? f.title, lastFetched: Date.now() }
+            ? { ...f, url: result.canonicalUrl, title: result.feed.title ?? f.title, lastFetched: Date.now() }
             : f
         );
         AsyncStorage.setItem(FEEDS_KEY, JSON.stringify(updated));
@@ -516,7 +557,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         const updated = currentFeeds.map((f) => {
           const match = results.find((r) => r.feed.id === f.id);
           if (!match?.result) return f;
-          return { ...f, title: match.result.feed.title ?? f.title, lastFetched: Date.now() };
+          return { ...f, url: match.result.canonicalUrl, title: match.result.feed.title ?? f.title, lastFetched: Date.now() };
         });
         AsyncStorage.setItem(FEEDS_KEY, JSON.stringify(updated));
         return updated;

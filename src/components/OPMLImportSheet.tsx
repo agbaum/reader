@@ -1,16 +1,17 @@
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
-import React, { useState, useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -78,16 +79,7 @@ export function OPMLImportSheet({ visible, onClose }: Props) {
       const uri = result.assets[0].uri;
 
       // Read the file content
-      let fileContent = "";
-      try {
-        const response = await fetch(uri);
-        fileContent = await response.text();
-      } catch {
-        // Fallback for different platforms
-        // On Android, we might need to read it differently
-        const response = await fetch(uri);
-        fileContent = await response.text();
-      }
+      const fileContent = await FileSystem.readAsStringAsync(uri);
 
       const parsedFeeds = parseOPML(fileContent);
       if (parsedFeeds.length === 0) {
@@ -128,10 +120,18 @@ export function OPMLImportSheet({ visible, onClose }: Props) {
 
       if (result.success > 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (result.failed > 0) {
+          console.warn(
+            `Failed to add ${result.failed} feed(s):`,
+            result.failedUrls.join(", ")
+          );
+        }
         Alert.alert(
           "Import successful",
           `Added ${result.success} feed${result.success !== 1 ? "s" : ""}${
-            result.failed > 0 ? `. Failed to add ${result.failed}.` : "."
+            result.failed > 0
+              ? `. Failed to add ${result.failed}:\n\n${result.failedUrls.join("\n")}`
+              : "."
           }`
         );
         setFeeds([]);
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   selectBtnText: {
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.light.accent,
+    color: "#fff",
   },
   content: {
     flex: 1,

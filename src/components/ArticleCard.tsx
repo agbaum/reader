@@ -1,14 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import React, { useCallback } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
 import { Article } from "@/context/FeedsContext";
@@ -41,19 +36,9 @@ export function ArticleCard({
   const handlePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onMarkRead(article.id);
-    router.push({
-      pathname: "/article",
-      params: {
-        url: article.url,
-        title: article.title,
-        articleId: article.id,
-        imageUrl: article.imageUrl ?? "",
-        description: article.description ?? "",
-        author: article.author ?? "",
-        feedTitle: article.feedTitle,
-        publishedAt: article.publishedAt?.toString() ?? "",
-      },
-    });
+    if (article.url) {
+      WebBrowser.openBrowserAsync(article.url);
+    }
   }, [article, onMarkRead]);
 
   return (

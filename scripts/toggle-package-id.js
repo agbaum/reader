@@ -15,7 +15,7 @@ const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8'));
 const devValues = {
   android: {
     package: 'com.akpgreentree.reader.dev',
-    versionCode: 7,
+    versionCode: 8,
   },
   ios: {
     bundleIdentifier: 'com.akpgreentree.reader.dev',
@@ -25,7 +25,7 @@ const devValues = {
 const prodValues = {
   android: {
     package: 'com.akpgreentree.reader',
-    versionCode: 7,
+    versionCode: 8,
   },
   ios: {
     bundleIdentifier: 'com.akpgreentree.reader',

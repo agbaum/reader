@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.akpgreentree.reader"
+      "package": "com.akpgreentree.reader",
+      "versionCode": 6
     },
     "web": {
       "output": "static",

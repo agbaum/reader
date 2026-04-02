@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useState } from "react";
 import {
-  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -13,33 +12,22 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddFeedSheet } from "@/components/AddFeedSheet";
+import { FeedSettingsSheet } from "@/components/FeedSettingsSheet";
 import Colors from "@/constants/colors";
-import { Feed, useFeeds } from "@/context/FeedsContext";
+import { EXPIRY_LABELS, Feed, useFeeds } from "@/context/FeedsContext";
 
 function FeedRow({
   feed,
-  onRemove,
   onRefresh,
+  onOpenSettings,
 }: {
   feed: Feed;
-  onRemove: (id: string) => void;
   onRefresh: (id: string) => void;
+  onOpenSettings: (feed: Feed) => void;
 }) {
   const { articles } = useFeeds();
   const unread = articles.filter((a) => a.feedId === feed.id && !a.isRead).length;
   const total = articles.filter((a) => a.feedId === feed.id).length;
-
-  const handleLongPress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      `Remove "${feed.title}"?`,
-      "This will delete all articles from this feed.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Remove", style: "destructive", onPress: () => onRemove(feed.id) },
-      ]
-    );
-  }, [feed, onRemove]);
 
   const handleRefresh = useCallback(() => {
     Haptics.selectionAsync();
@@ -54,10 +42,11 @@ function FeedRow({
     }
   })();
 
+  const expiryLabel = EXPIRY_LABELS[feed.expiryBucket ?? "3d"];
+
   return (
     <Pressable
-      onLongPress={handleLongPress}
-      delayLongPress={500}
+      onPress={() => onOpenSettings(feed)}
       style={({ pressed }) => [styles.feedRow, pressed && { opacity: 0.8 }]}
     >
       <View style={styles.feedIcon}>
@@ -71,7 +60,7 @@ function FeedRow({
           {domain}
         </Text>
         <Text style={styles.feedCount}>
-          {unread > 0 ? `${unread} unread` : "Up to date"} · {total} total
+          {unread > 0 ? `${unread} unread` : "Up to date"} · {total} total · expires {expiryLabel}
         </Text>
       </View>
       <Pressable
@@ -86,17 +75,18 @@ function FeedRow({
 }
 
 export default function FeedsScreen() {
-  const { feeds, removeFeed, refreshFeed } = useFeeds();
+  const { feeds, refreshFeed } = useFeeds();
   const insets = useSafeAreaInsets();
   const [showAdd, setShowAdd] = useState(false);
+  const [settingsFeed, setSettingsFeed] = useState<Feed | null>(null);
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
 
   const renderItem = useCallback(
     ({ item }: { item: Feed }) => (
-      <FeedRow feed={item} onRemove={removeFeed} onRefresh={refreshFeed} />
+      <FeedRow feed={item} onRefresh={refreshFeed} onOpenSettings={setSettingsFeed} />
     ),
-    [removeFeed, refreshFeed]
+    [refreshFeed]
   );
 
   const ListHeader = (
@@ -157,6 +147,7 @@ export default function FeedsScreen() {
         ]}
       />
       <AddFeedSheet visible={showAdd} onClose={() => setShowAdd(false)} />
+      <FeedSettingsSheet feed={settingsFeed} onClose={() => setSettingsFeed(null)} />
     </View>
   );
 }

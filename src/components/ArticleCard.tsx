@@ -11,6 +11,7 @@ import { Article } from "@/context/FeedsContext";
 interface ArticleCardProps {
   article: Article;
   onMarkRead: (id: string) => void;
+  onResetExpiry?: (id: string) => void;
   showFeedName?: boolean;
 }
 
@@ -31,6 +32,7 @@ function timeAgo(ts?: number): string {
 export function ArticleCard({
   article,
   onMarkRead,
+  onResetExpiry,
   showFeedName = true,
 }: ArticleCardProps) {
   const handlePress = useCallback(() => {
@@ -41,9 +43,16 @@ export function ArticleCard({
     }
   }, [article, onMarkRead]);
 
+  const handleLongPress = useCallback(() => {
+    if (!onResetExpiry) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onResetExpiry(article.id);
+  }, [article.id, onResetExpiry]);
+
   return (
     <Pressable
       onPress={handlePress}
+      onLongPress={handleLongPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <View style={styles.content}>

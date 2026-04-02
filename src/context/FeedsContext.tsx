@@ -9,6 +9,22 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 
+export type ExpiryBucket = "6h" | "18h" | "3d" | "7d";
+
+export const EXPIRY_DURATIONS: Record<ExpiryBucket, number> = {
+  "6h":  6  * 60 * 60 * 1000,
+  "18h": 18 * 60 * 60 * 1000,
+  "3d":  3  * 24 * 60 * 60 * 1000,
+  "7d":  7  * 24 * 60 * 60 * 1000,
+};
+
+export const EXPIRY_LABELS: Record<ExpiryBucket, string> = {
+  "6h":  "6 hours",
+  "18h": "18 hours",
+  "3d":  "3 days",
+  "7d":  "1 week",
+};
+
 export interface Feed {
   id: string;
   url: string;
@@ -16,6 +32,7 @@ export interface Feed {
   description?: string;
   imageUrl?: string;
   lastFetched?: number;
+  expiryBucket?: ExpiryBucket;
 }
 
 export interface Article {
@@ -28,6 +45,7 @@ export interface Article {
   url: string;
   imageUrl?: string;
   publishedAt?: number;
+  fetchedAt?: number;
   isRead: boolean;
   author?: string;
 }
@@ -43,6 +61,8 @@ interface FeedsContextValue {
   markAllAsRead: (feedId?: string) => void;
   refreshFeeds: () => Promise<void>;
   refreshFeed: (feedId: string) => Promise<void>;
+  updateFeedExpiry: (feedId: string, bucket: ExpiryBucket) => Promise<void>;
+  resetArticleExpiry: (articleId: string) => Promise<void>;
   unreadCount: number;
 }
 
@@ -240,6 +260,17 @@ async function fetchFeedData(
   }
 }
 
+function expireArticles(articles: Article[], feeds: Feed[]): Article[] {
+  const feedMap = new Map(feeds.map((f) => [f.id, f]));
+  return articles.filter((article) => {
+    const feed = feedMap.get(article.feedId);
+    if (!feed) return false;
+    const duration = EXPIRY_DURATIONS[feed.expiryBucket ?? "3d"];
+    const age = Date.now() - (article.fetchedAt ?? article.publishedAt ?? 0);
+    return age < duration;
+  });
+}
+
 export function FeedsProvider({ children }: { children: ReactNode }) {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -289,6 +320,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
                   url: a.url ?? "",
                   isRead: false,
                   publishedAt: a.publishedAt ?? Date.now(),
+                  fetchedAt: Date.now(),
                 }));
 
               const updatedFeed = {
@@ -307,8 +339,9 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             })
           );
 
-          const sorted = [...loadedArticles].sort(
-            (a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)
+          const sorted = expireArticles(
+            [...loadedArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
+            loadedFeeds
           );
           setFeeds([...loadedFeeds]);
           setArticles(sorted);
@@ -368,11 +401,13 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         url: a.url ?? "",
         isRead: false,
         publishedAt: a.publishedAt ?? Date.now(),
+        fetchedAt: Date.now(),
       }));
 
       const updatedFeeds = [...feeds, newFeed];
-      const updatedArticles = [...articles, ...newArticles].sort(
-        (a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)
+      const updatedArticles = expireArticles(
+        [...articles, ...newArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
+        updatedFeeds
       );
 
       await saveFeeds(updatedFeeds);
@@ -424,6 +459,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           url: a.url ?? "",
           isRead: false,
           publishedAt: a.publishedAt ?? Date.now(),
+          fetchedAt: Date.now(),
         }));
 
         newFeeds.push(newFeed);
@@ -431,10 +467,12 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         successCount++;
       }
 
-      const sorted = [...newArticles, ...articles].sort(
-        (a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)
+      const allFeeds = [...feeds, ...newFeeds];
+      const sorted = expireArticles(
+        [...newArticles, ...articles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
+        allFeeds
       );
-      await saveFeeds([...feeds, ...newFeeds]);
+      await saveFeeds(allFeeds);
       await saveArticles(sorted);
       return { success: successCount, failed: failedUrls.length, failedUrls };
     },
@@ -495,9 +533,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             url: a.url ?? "",
             isRead: false,
             publishedAt: a.publishedAt ?? Date.now(),
+            fetchedAt: Date.now(),
           }));
-        const sorted = [...newArticles, ...currentArticles].sort(
-          (a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)
+        const sorted = expireArticles(
+          [...newArticles, ...currentArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
+          feeds
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         return sorted;
@@ -545,10 +585,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
               url: a.url ?? "",
               isRead: false,
               publishedAt: a.publishedAt ?? Date.now(),
+              fetchedAt: Date.now(),
             }));
           merged = [...newArticles, ...merged];
         }
-        const sorted = merged.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
+        const sorted = expireArticles(
+          merged.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
+          feeds
+        );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         return sorted;
       });
@@ -566,6 +610,26 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       setIsRefreshing(false);
     }
   }, [feeds]);
+
+  const updateFeedExpiry = useCallback(
+    async (feedId: string, bucket: ExpiryBucket) => {
+      const updated = feeds.map((f) =>
+        f.id === feedId ? { ...f, expiryBucket: bucket } : f
+      );
+      await saveFeeds(updated);
+    },
+    [feeds, saveFeeds]
+  );
+
+  const resetArticleExpiry = useCallback(
+    async (articleId: string) => {
+      const updated = articles.map((a) =>
+        a.id === articleId ? { ...a, fetchedAt: Date.now() } : a
+      );
+      await saveArticles(updated);
+    },
+    [articles, saveArticles]
+  );
 
   const articlesWithState = articles.map((a) => ({
     ...a,
@@ -587,6 +651,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         markAllAsRead,
         refreshFeeds,
         refreshFeed,
+        updateFeedExpiry,
+        resetArticleExpiry,
         unreadCount,
       }}
     >

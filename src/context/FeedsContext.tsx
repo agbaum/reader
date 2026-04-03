@@ -66,6 +66,7 @@ interface FeedsContextValue {
   updateFeedExpiry: (feedId: string, bucket: ExpiryBucket) => Promise<void>;
   renameFeed: (feedId: string, customTitle: string) => Promise<void>;
   resetArticleExpiry: (articleId: string) => Promise<void>;
+  dismissArticle: (articleId: string) => void;
   unreadCount: number;
 }
 
@@ -634,6 +635,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     [feeds, saveFeeds]
   );
 
+  const dismissArticle = useCallback((articleId: string) => {
+    setArticles((current) => {
+      const updated = current.filter((a) => a.id !== articleId);
+      AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   const resetArticleExpiry = useCallback(async (articleId: string) => {
     setArticles((current) => {
       const updated = current.map((a) =>
@@ -673,6 +682,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         updateFeedExpiry,
         renameFeed,
         resetArticleExpiry,
+        dismissArticle,
         unreadCount,
       }}
     >

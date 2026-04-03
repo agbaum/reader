@@ -46,6 +46,7 @@ export default function ArticleScreen() {
       await WebBrowser.openBrowserAsync(params.url, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
         toolbarColor: Colors.light.surface,
+        createTask: false,
       });
     }
   }, [params.url]);

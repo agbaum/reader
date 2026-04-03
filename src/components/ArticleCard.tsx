@@ -60,7 +60,7 @@ export function ArticleCard({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onMarkRead(article.id);
     if (article.url) {
-      WebBrowser.openBrowserAsync(article.url);
+      WebBrowser.openBrowserAsync(article.url, { createTask: false });
     }
   }, [article, onMarkRead]);
 

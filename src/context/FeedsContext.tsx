@@ -634,15 +634,15 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     [feeds, saveFeeds]
   );
 
-  const resetArticleExpiry = useCallback(
-    async (articleId: string) => {
-      const updated = articles.map((a) =>
+  const resetArticleExpiry = useCallback(async (articleId: string) => {
+    setArticles((current) => {
+      const updated = current.map((a) =>
         a.id === articleId ? { ...a, fetchedAt: Date.now() } : a
       );
-      await saveArticles(updated);
-    },
-    [articles, saveArticles]
-  );
+      AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
   const feedMap = new Map(feeds.map((f) => [f.id, f]));
   const articlesWithState = articles.map((a) => {

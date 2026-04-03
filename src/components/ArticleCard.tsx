@@ -6,7 +6,14 @@ import React, { useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import Colors from "@/constants/colors";
-import { Article } from "@/context/FeedsContext";
+import { Article, ExpiryBucket } from "@/context/FeedsContext";
+
+const EXPIRY_COLORS: Record<ExpiryBucket, string> = {
+  "6h":  "#C97676", // soft red
+  "18h": "#9B88C4", // soft purple
+  "3d":  "#6E9AB5", // soft blue
+  "7d":  "#74A87E", // soft green
+};
 
 interface ArticleCardProps {
   article: Article;
@@ -55,6 +62,9 @@ export function ArticleCard({
       onLongPress={handleLongPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
+      {article.expiryBucket && (
+        <View style={[styles.expiryStrip, { backgroundColor: EXPIRY_COLORS[article.expiryBucket] }]} />
+      )}
       <View style={styles.content}>
         <View style={styles.meta}>
           {showFeedName && (
@@ -107,9 +117,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 5,
     borderRadius: 14,
-    padding: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingLeft: 19,
+    paddingRight: 16,
     flexDirection: "row",
     overflow: "hidden",
+  },
+  expiryStrip: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
   },
   cardPressed: {
     opacity: 0.8,

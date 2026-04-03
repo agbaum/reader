@@ -29,6 +29,7 @@ export interface Feed {
   id: string;
   url: string;
   title: string;
+  customTitle?: string;
   description?: string;
   imageUrl?: string;
   lastFetched?: number;
@@ -48,6 +49,7 @@ export interface Article {
   fetchedAt?: number;
   isRead: boolean;
   author?: string;
+  expiryBucket?: ExpiryBucket;
 }
 
 interface FeedsContextValue {
@@ -62,6 +64,7 @@ interface FeedsContextValue {
   refreshFeeds: () => Promise<void>;
   refreshFeed: (feedId: string) => Promise<void>;
   updateFeedExpiry: (feedId: string, bucket: ExpiryBucket) => Promise<void>;
+  renameFeed: (feedId: string, customTitle: string) => Promise<void>;
   resetArticleExpiry: (articleId: string) => Promise<void>;
   unreadCount: number;
 }
@@ -621,6 +624,16 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     [feeds, saveFeeds]
   );
 
+  const renameFeed = useCallback(
+    async (feedId: string, customTitle: string) => {
+      const updated = feeds.map((f) =>
+        f.id === feedId ? { ...f, customTitle: customTitle.trim() || undefined } : f
+      );
+      await saveFeeds(updated);
+    },
+    [feeds, saveFeeds]
+  );
+
   const resetArticleExpiry = useCallback(
     async (articleId: string) => {
       const updated = articles.map((a) =>
@@ -631,10 +644,16 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     [articles, saveArticles]
   );
 
-  const articlesWithState = articles.map((a) => ({
-    ...a,
-    isRead: readIds.has(a.id),
-  }));
+  const feedMap = new Map(feeds.map((f) => [f.id, f]));
+  const articlesWithState = articles.map((a) => {
+    const feed = feedMap.get(a.feedId);
+    return {
+      ...a,
+      feedTitle: feed?.customTitle ?? a.feedTitle,
+      isRead: readIds.has(a.id),
+      expiryBucket: feed?.expiryBucket ?? "3d",
+    };
+  });
 
   const unreadCount = articlesWithState.filter((a) => !a.isRead).length;
 
@@ -652,6 +671,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         refreshFeeds,
         refreshFeed,
         updateFeedExpiry,
+        renameFeed,
         resetArticleExpiry,
         unreadCount,
       }}

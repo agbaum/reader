@@ -1,11 +1,12 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,8 +28,19 @@ interface Props {
 }
 
 export function FeedSettingsSheet({ feed, onClose }: Props) {
-  const { updateFeedExpiry, removeFeed } = useFeeds();
+  const { updateFeedExpiry, renameFeed, removeFeed } = useFeeds();
   const insets = useSafeAreaInsets();
+  const [draftTitle, setDraftTitle] = useState(feed?.customTitle ?? "");
+
+  useEffect(() => {
+    setDraftTitle(feed?.customTitle ?? "");
+  }, [feed?.id]);
+
+  const handleSaveTitle = useCallback(async () => {
+    if (!feed) return;
+    await renameFeed(feed.id, draftTitle);
+    Haptics.selectionAsync();
+  }, [feed, draftTitle, renameFeed]);
 
   const handleSelectBucket = useCallback(
     async (bucket: ExpiryBucket) => {
@@ -62,11 +74,31 @@ export function FeedSettingsSheet({ feed, onClose }: Props) {
 
         <View style={styles.header}>
           <View>
-            <Text style={styles.title} numberOfLines={1}>{feed.title}</Text>
+            <Text style={styles.title} numberOfLines={1}>{feed.customTitle ?? feed.title}</Text>
             <Text style={styles.subtitle}>Feed settings</Text>
           </View>
           <Pressable onPress={onClose} hitSlop={12}>
             <Feather name="x" size={22} color={Colors.light.textSecondary} />
+          </Pressable>
+        </View>
+
+        <Text style={styles.sectionLabel}>Custom label</Text>
+        <View style={styles.labelRow}>
+          <TextInput
+            style={styles.labelInput}
+            value={draftTitle}
+            onChangeText={setDraftTitle}
+            placeholder={feed.title}
+            placeholderTextColor={Colors.light.textTertiary}
+            returnKeyType="done"
+            onSubmitEditing={handleSaveTitle}
+            autoCorrect={false}
+          />
+          <Pressable
+            onPress={handleSaveTitle}
+            style={({ pressed }) => [styles.saveBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.saveBtnText}>Save</Text>
           </Pressable>
         </View>
 
@@ -142,6 +174,37 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
     marginTop: 2,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 24,
+  },
+  labelInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: Colors.light.surface,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: Colors.light.text,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  saveBtn: {
+    height: 44,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.light.accent,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
   },
   sectionLabel: {
     fontSize: 12,

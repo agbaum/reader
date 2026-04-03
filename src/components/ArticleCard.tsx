@@ -158,7 +158,6 @@ export function ArticleCard({
               )}
             </View>
 
-            {!article.isRead && <View style={styles.unreadDot} />}
           </Pressable>
         </Animated.View>
       </GestureDetector>
@@ -264,13 +263,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textTertiary,
-  },
-  unreadDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: Colors.light.accent,
-    marginLeft: 10,
-    marginTop: 6,
   },
 });

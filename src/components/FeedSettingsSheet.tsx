@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -30,6 +30,9 @@ interface Props {
 export function FeedSettingsSheet({ feed, onClose }: Props) {
   const { updateFeedExpiry, renameFeed, removeFeed } = useFeeds();
   const insets = useSafeAreaInsets();
+  const lastFeedRef = useRef(feed);
+  if (feed) lastFeedRef.current = feed;
+  const displayFeed = lastFeedRef.current;
   const [draftTitle, setDraftTitle] = useState(feed?.customTitle ?? "");
 
   useEffect(() => {
@@ -58,9 +61,9 @@ export function FeedSettingsSheet({ feed, onClose }: Props) {
     onClose();
   }, [feed, removeFeed, onClose]);
 
-  if (!feed) return null;
+  if (!displayFeed) return null;
 
-  const current = feed.expiryBucket ?? "3d";
+  const current = displayFeed.expiryBucket ?? "3d";
 
   return (
     <Modal
@@ -74,7 +77,7 @@ export function FeedSettingsSheet({ feed, onClose }: Props) {
 
         <View style={styles.header}>
           <View>
-            <Text style={styles.title} numberOfLines={1}>{feed.customTitle ?? feed.title}</Text>
+            <Text style={styles.title} numberOfLines={1}>{displayFeed.customTitle ?? displayFeed.title}</Text>
             <Text style={styles.subtitle}>Feed settings</Text>
           </View>
           <Pressable onPress={onClose} hitSlop={12}>
@@ -88,7 +91,7 @@ export function FeedSettingsSheet({ feed, onClose }: Props) {
             style={styles.labelInput}
             value={draftTitle}
             onChangeText={setDraftTitle}
-            placeholder={feed.title}
+            placeholder={displayFeed.title}
             placeholderTextColor={Colors.light.textTertiary}
             returnKeyType="done"
             onSubmitEditing={handleSaveTitle}

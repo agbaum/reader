@@ -163,7 +163,7 @@ export function FeedsPanel({ visible, onClose }: FeedsPanelProps) {
           ]}
         />
         <AddFeedSheet visible={showAdd} onClose={() => setShowAdd(false)} />
-        <FeedSettingsSheet feed={selectedFeed} onClose={() => setSelectedFeed(null)} />
+        <FeedSettingsSheet feed={selectedFeed} onClose={() => setSelectedFeedId(null)} />
       </View>
     </Modal>
   );

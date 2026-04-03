@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useState } from "react";
 import {
-  Alert,
   FlatList,
   Modal,
   Platform,
@@ -14,16 +13,17 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddFeedSheet } from "@/components/AddFeedSheet";
+import { FeedSettingsSheet } from "@/components/FeedSettingsSheet";
 import Colors from "@/constants/colors";
 import { Feed, useFeeds } from "@/context/FeedsContext";
 
 function FeedRow({
   feed,
-  onRemove,
+  onPress,
   onRefresh,
 }: {
   feed: Feed;
-  onRemove: (id: string) => void;
+  onPress: (feed: Feed) => void;
   onRefresh: (id: string) => void;
 }) {
   const { articles } = useFeeds();
@@ -38,18 +38,6 @@ function FeedRow({
     }
   })();
 
-  const handleLongPress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      `Remove "${feed.title}"?`,
-      "This will delete all articles from this feed.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Remove", style: "destructive", onPress: () => onRemove(feed.id) },
-      ]
-    );
-  }, [feed, onRemove]);
-
   const handleRefresh = useCallback(() => {
     Haptics.selectionAsync();
     onRefresh(feed.id);
@@ -57,8 +45,7 @@ function FeedRow({
 
   return (
     <Pressable
-      onLongPress={handleLongPress}
-      delayLongPress={500}
+      onPress={() => onPress(feed)}
       style={({ pressed }) => [styles.feedRow, pressed && { opacity: 0.8 }]}
     >
       <View style={styles.feedIcon}>
@@ -66,7 +53,7 @@ function FeedRow({
       </View>
       <View style={styles.feedInfo}>
         <Text style={styles.feedTitle} numberOfLines={1}>
-          {feed.title}
+          {feed.customTitle ?? feed.title}
         </Text>
         <Text style={styles.feedDomain} numberOfLines={1}>
           {domain}
@@ -92,15 +79,18 @@ interface FeedsPanelProps {
 }
 
 export function FeedsPanel({ visible, onClose }: FeedsPanelProps) {
-  const { feeds, removeFeed, refreshFeed } = useFeeds();
+  const { feeds, refreshFeed } = useFeeds();
   const insets = useSafeAreaInsets();
   const [showAdd, setShowAdd] = useState(false);
+  const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
+
+  const selectedFeed = selectedFeedId ? (feeds.find((f) => f.id === selectedFeedId) ?? null) : null;
 
   const renderItem = useCallback(
     ({ item }: { item: Feed }) => (
-      <FeedRow feed={item} onRemove={removeFeed} onRefresh={refreshFeed} />
+      <FeedRow feed={item} onPress={(f) => setSelectedFeedId(f.id)} onRefresh={refreshFeed} />
     ),
-    [removeFeed, refreshFeed]
+    [refreshFeed]
   );
 
   const ListHeader = (
@@ -173,6 +163,7 @@ export function FeedsPanel({ visible, onClose }: FeedsPanelProps) {
           ]}
         />
         <AddFeedSheet visible={showAdd} onClose={() => setShowAdd(false)} />
+        <FeedSettingsSheet feed={selectedFeed} onClose={() => setSelectedFeed(null)} />
       </View>
     </Modal>
   );

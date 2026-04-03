@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -14,7 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import Colors from "@/constants/colors";
-import { Article, ExpiryBucket } from "@/context/FeedsContext";
+import { Article, EXPIRY_DURATIONS, ExpiryBucket } from "@/context/FeedsContext";
 
 const EXPIRY_COLORS: Record<ExpiryBucket, string> = {
   "6h":  "#C97676", // soft red
@@ -55,6 +55,13 @@ export function ArticleCard({
   showFeedName = true,
 }: ArticleCardProps) {
   const translateX = useSharedValue(0);
+
+  const expiryPct = useMemo(() => {
+    if (!article.fetchedAt || !article.expiryBucket) return 1;
+    const duration = EXPIRY_DURATIONS[article.expiryBucket];
+    const elapsed = Date.now() - article.fetchedAt;
+    return Math.max(0, Math.min(1, 1 - elapsed / duration));
+  }, [article.fetchedAt, article.expiryBucket]);
 
   const handlePress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -115,7 +122,12 @@ export function ArticleCard({
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           >
             {article.expiryBucket && (
-              <View style={[styles.expiryStrip, { backgroundColor: EXPIRY_COLORS[article.expiryBucket] }]} />
+              <View style={[styles.expiryTrack, { backgroundColor: EXPIRY_COLORS[article.expiryBucket] + "30" }]}>
+                <View style={[styles.expiryFill, {
+                  height: `${expiryPct * 100}%`,
+                  backgroundColor: EXPIRY_COLORS[article.expiryBucket],
+                }]} />
+              </View>
             )}
             <View style={styles.content}>
               <View style={styles.meta}>
@@ -198,12 +210,17 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     transform: [{ scale: 0.99 }],
   },
-  expiryStrip: {
+  expiryTrack: {
     position: "absolute",
     left: 0,
-    top: 0,
-    bottom: 0,
+    top: 10,
+    bottom: 10,
     width: 3,
+    borderRadius: 1.5,
+    overflow: "hidden",
+  },
+  expiryFill: {
+    width: "100%",
   },
   content: {
     flex: 1,

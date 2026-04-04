@@ -145,7 +145,15 @@ export function FeedsPanel({ visible, onClose }: FeedsPanelProps) {
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (selectedFeedId) {
+          setSelectedFeedId(null);
+        } else if (showAdd) {
+          setShowAdd(false);
+        } else {
+          onClose();
+        }
+      }}
       statusBarTranslucent={Platform.OS !== "ios"}
     >
       <View style={styles.container}>

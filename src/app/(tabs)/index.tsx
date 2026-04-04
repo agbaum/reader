@@ -5,7 +5,7 @@ import {
   Animated,
   FlatList,
   Pressable,
-  RefreshControl,
+
   StyleSheet,
   Text,
   View,
@@ -86,8 +86,7 @@ export default function TodayScreen() {
   ];
 
   const ListHeader = (
-    <View style={[styles.header, { paddingTop: topPad + 16 }]}>
-      <RefreshingBar visible={isRefreshing} />
+    <View style={[styles.header, { paddingTop: topPad + 8 }]}>
       <Pressable
         onPress={() => {
           Haptics.selectionAsync();
@@ -98,6 +97,7 @@ export default function TodayScreen() {
       >
         <Feather name="menu" size={20} color={Colors.light.text} />
       </Pressable>
+      <RefreshingBar visible={isRefreshing} />
     </View>
   );
 
@@ -125,15 +125,7 @@ export default function TodayScreen() {
         showsVerticalScrollIndicator={false}
         scrollEnabled={true}
         overScrollMode="always"
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refreshFeeds}
-            tintColor={Colors.light.accent}
-            colors={[Colors.light.accent]}
-            progressBackgroundColor={Colors.light.surface}
-          />
-        }
+
         contentContainerStyle={styles.list}
       />
 
@@ -166,8 +158,10 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 16,
+    paddingBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   refreshBar: {
     flexDirection: "row",
@@ -177,8 +171,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: Colors.light.accentLight,
     borderRadius: 20,
-    alignSelf: "flex-start",
-    marginBottom: 4,
   },
   refreshBarText: {
     fontSize: 12,
@@ -192,7 +184,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.surfaceAlt,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
   },
   empty: {
     flex: 1,

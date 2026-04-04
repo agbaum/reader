@@ -123,10 +123,8 @@ export function ArticleCard({
           >
             {article.expiryBucket && (
               <View style={[styles.expiryTrack, { backgroundColor: EXPIRY_COLORS[article.expiryBucket] + "30" }]}>
-                <View style={[styles.expiryFill, {
-                  height: `${expiryPct * 100}%`,
-                  backgroundColor: EXPIRY_COLORS[article.expiryBucket],
-                }]} />
+                <View style={{ flex: 1 - expiryPct }} />
+                <View style={[styles.expiryFill, { flex: expiryPct, backgroundColor: EXPIRY_COLORS[article.expiryBucket] }]} />
               </View>
             )}
             <View style={styles.content}>
@@ -219,9 +217,7 @@ const styles = StyleSheet.create({
     borderRadius: 1.5,
     overflow: "hidden",
   },
-  expiryFill: {
-    width: "100%",
-  },
+  expiryFill: {},
   content: {
     flex: 1,
     gap: 8,

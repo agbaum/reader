@@ -96,8 +96,7 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (compatible; RSS Reader)",
         Accept: "application/rss+xml, application/atom+xml, */*",
         "Accept-Encoding": "gzip, deflate",
       },

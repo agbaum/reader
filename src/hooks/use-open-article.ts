@@ -5,15 +5,16 @@ import { useCallback } from "react";
 import { Article, useFeeds } from "@/context/FeedsContext";
 
 export function useOpenArticle() {
-  const { markAsRead } = useFeeds();
+  const { markAsRead, refreshFeeds } = useFeeds();
   return useCallback(
-    (article: Article) => {
+    async (article: Article) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       markAsRead(article.id);
       if (article.url) {
-        WebBrowser.openBrowserAsync(article.url, { createTask: false });
+        await WebBrowser.openBrowserAsync(article.url, { createTask: false });
+        refreshFeeds();
       }
     },
-    [markAsRead]
+    [markAsRead, refreshFeeds]
   );
 }

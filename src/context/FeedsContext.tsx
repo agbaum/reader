@@ -5,9 +5,10 @@ import React, {
     useCallback,
     useContext,
     useEffect,
+    useRef,
     useState,
 } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 export type ExpiryBucket = "6h" | "18h" | "3d" | "7d";
 
@@ -292,6 +293,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [dismissedUrls, setDismissedUrls] = useState<Map<string, number>>(new Map());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
     const load = async () => {
@@ -391,6 +393,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error("Load error:", e);
         setIsRefreshing(false);
+      } finally {
+        initialLoadDone.current = true;
       }
     };
     load();
@@ -678,6 +682,15 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       setIsRefreshing(false);
     }
   }, [feeds, dismissedUrls]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && initialLoadDone.current) {
+        refreshFeeds();
+      }
+    });
+    return () => subscription.remove();
+  }, [refreshFeeds]);
 
   const updateFeedExpiry = useCallback(
     async (feedId: string, bucket: ExpiryBucket) => {

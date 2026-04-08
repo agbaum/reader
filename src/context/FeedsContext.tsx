@@ -128,6 +128,35 @@ async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   }
 }
 
+// Named timezone abbreviations JS can't parse natively, mapped to UTC offsets
+const TZ_OFFSETS: Record<string, string> = {
+  EDT: "-0400", CDT: "-0500", MDT: "-0600", PDT: "-0700",
+  EST: "-0500", CST: "-0600", MST: "-0700", PST: "-0800",
+  GMT: "+0000", UT:  "+0000", UTC: "+0000",
+};
+
+function parsePubDate(str: string): number {
+  if (!str) return Date.now();
+
+  // Try direct parse (handles RFC 822 with numeric tz and ISO 8601)
+  let ts = new Date(str).getTime();
+  if (!isNaN(ts)) return ts;
+
+  // Replace named timezone abbreviations with numeric offsets
+  const normalized = str.replace(
+    /\b([A-Z]{2,5})\s*$/,
+    (_, tz) => TZ_OFFSETS[tz] ?? "+0000"
+  );
+  ts = new Date(normalized).getTime();
+  if (!isNaN(ts)) return ts;
+
+  // Handle "YYYY-MM-DD HH:MM:SS" (space instead of T separator)
+  ts = new Date(str.replace(" ", "T")).getTime();
+  if (!isNaN(ts)) return ts;
+
+  return Date.now();
+}
+
 async function fetchFeedData(
   url: string
 ): Promise<{ feed: Partial<Feed>; articles: Partial<Article>[]; canonicalUrl: string } | null> {
@@ -243,7 +272,7 @@ async function fetchFeedData(
         description = stripHtml(description);
       }
 
-      const publishedAt = pubDate ? new Date(pubDate).getTime() : Date.now();
+      const publishedAt = parsePubDate(pubDate);
 
       return {
         id: generateId(),
@@ -251,7 +280,7 @@ async function fetchFeedData(
         url: link,
         description: description?.slice(0, 300),
         imageUrl: imageUrl || undefined,
-        publishedAt: isNaN(publishedAt) ? Date.now() : publishedAt,
+        publishedAt,
         author: author || undefined,
         isRead: false,
       };

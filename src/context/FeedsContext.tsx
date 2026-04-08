@@ -75,6 +75,8 @@ const FeedsContext = createContext<FeedsContextValue | null>(null);
 const FEEDS_KEY = "rss_feeds_v2";
 const ARTICLES_KEY = "rss_articles_v2";
 const READ_KEY = "rss_read_ids_v2";
+const DISMISSED_URLS_KEY = "rss_dismissed_urls_v2";
+const MAX_DISMISSED_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days — matches the longest expiry bucket
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -263,30 +265,42 @@ async function fetchFeedData(
   }
 }
 
-function expireArticles(articles: Article[], feeds: Feed[]): Article[] {
+function expireArticles(articles: Article[], feeds: Feed[]): { kept: Article[]; expiredUrls: string[] } {
   const feedMap = new Map(feeds.map((f) => [f.id, f]));
-  return articles.filter((article) => {
+  const kept: Article[] = [];
+  const expiredUrls: string[] = [];
+  for (const article of articles) {
     const feed = feedMap.get(article.feedId);
-    if (!feed) return false;
+    if (!feed) {
+      expiredUrls.push(article.url);
+      continue;
+    }
     const duration = EXPIRY_DURATIONS[feed.expiryBucket ?? "3d"];
     const age = Date.now() - (article.fetchedAt ?? article.publishedAt ?? 0);
-    return age < duration;
-  });
+    if (age < duration) {
+      kept.push(article);
+    } else {
+      expiredUrls.push(article.url);
+    }
+  }
+  return { kept, expiredUrls };
 }
 
 export function FeedsProvider({ children }: { children: ReactNode }) {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [dismissedUrls, setDismissedUrls] = useState<Map<string, number>>(new Map());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [feedsStr, articlesStr, readStr] = await Promise.all([
+        const [feedsStr, articlesStr, readStr, dismissedStr] = await Promise.all([
           AsyncStorage.getItem(FEEDS_KEY),
           AsyncStorage.getItem(ARTICLES_KEY),
           AsyncStorage.getItem(READ_KEY),
+          AsyncStorage.getItem(DISMISSED_URLS_KEY),
         ]);
 
         const loadedFeeds: Feed[] = feedsStr ? JSON.parse(feedsStr) : [];
@@ -294,6 +308,17 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         const loadedReadIds: Set<string> = readStr
           ? new Set(JSON.parse(readStr))
           : new Set();
+
+        // Load and prune dismissed URLs older than the max expiry window
+        const now = Date.now();
+        const rawDismissed: [string, number][] = dismissedStr ? JSON.parse(dismissedStr) : [];
+        const prunedDismissed = new Map(
+          rawDismissed.filter(([, ts]) => now - ts < MAX_DISMISSED_AGE)
+        );
+        setDismissedUrls(prunedDismissed);
+        if (prunedDismissed.size !== rawDismissed.length) {
+          await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...prunedDismissed.entries()]));
+        }
 
         setFeeds(loadedFeeds);
         setArticles(loadedArticles);
@@ -307,9 +332,10 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
               const result = await fetchFeedData(feed.url);
               if (!result) return;
 
-              const existingUrls = new Set(
-                loadedArticles.filter((a) => a.feedId === feed.id).map((a) => a.url)
-              );
+              const existingUrls = new Set([
+                ...loadedArticles.filter((a) => a.feedId === feed.id).map((a) => a.url),
+                ...prunedDismissed.keys(),
+              ]);
 
               const newArticles: Article[] = result.articles
                 .filter((a) => !existingUrls.has(a.url ?? ""))
@@ -342,10 +368,20 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             })
           );
 
-          const sorted = expireArticles(
+          const { kept: sorted, expiredUrls } = expireArticles(
             [...loadedArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
             loadedFeeds
           );
+
+          if (expiredUrls.length > 0) {
+            const ts = Date.now();
+            for (const url of expiredUrls) {
+              if (url) prunedDismissed.set(url, ts);
+            }
+            setDismissedUrls(new Map(prunedDismissed));
+            await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...prunedDismissed.entries()]));
+          }
+
           setFeeds([...loadedFeeds]);
           setArticles(sorted);
           await AsyncStorage.setItem(FEEDS_KEY, JSON.stringify(loadedFeeds));
@@ -373,6 +409,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const saveReadIds = useCallback(async (ids: Set<string>) => {
     setReadIds(ids);
     await AsyncStorage.setItem(READ_KEY, JSON.stringify([...ids]));
+  }, []);
+
+  const saveDismissedUrls = useCallback(async (m: Map<string, number>) => {
+    setDismissedUrls(m);
+    await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...m.entries()]));
   }, []);
 
   const addFeed = useCallback(
@@ -408,7 +449,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       }));
 
       const updatedFeeds = [...feeds, newFeed];
-      const updatedArticles = expireArticles(
+      const { kept: updatedArticles } = expireArticles(
         [...articles, ...newArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
         updatedFeeds
       );
@@ -471,7 +512,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       }
 
       const allFeeds = [...feeds, ...newFeeds];
-      const sorted = expireArticles(
+      const { kept: sorted } = expireArticles(
         [...newArticles, ...articles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
         allFeeds
       );
@@ -521,9 +562,10 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
 
       // Snapshot current articles to avoid stale state issues
       setArticles((currentArticles) => {
-        const existingUrls = new Set(
-          currentArticles.filter((a) => a.feedId === feedId).map((a) => a.url)
-        );
+        const existingUrls = new Set([
+          ...currentArticles.filter((a) => a.feedId === feedId).map((a) => a.url),
+          ...dismissedUrls.keys(),
+        ]);
         const newArticles: Article[] = result.articles
           .filter((a) => !existingUrls.has(a.url ?? ""))
           .map((a) => ({
@@ -538,11 +580,22 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             publishedAt: a.publishedAt ?? Date.now(),
             fetchedAt: Date.now(),
           }));
-        const sorted = expireArticles(
+        const { kept: sorted, expiredUrls } = expireArticles(
           [...newArticles, ...currentArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
           feeds
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
+        if (expiredUrls.length > 0) {
+          setDismissedUrls((prev) => {
+            const next = new Map(prev);
+            const ts = Date.now();
+            for (const url of expiredUrls) {
+              if (url) next.set(url, ts);
+            }
+            AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...next.entries()]));
+            return next;
+          });
+        }
         return sorted;
       });
 
@@ -556,7 +609,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         return updated;
       });
     },
-    [feeds]
+    [feeds, dismissedUrls]
   );
 
   const refreshFeeds = useCallback(async () => {
@@ -573,9 +626,10 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         let merged = [...currentArticles];
         for (const { feed, result } of results) {
           if (!result) continue;
-          const existingUrls = new Set(
-            merged.filter((a) => a.feedId === feed.id).map((a) => a.url)
-          );
+          const existingUrls = new Set([
+            ...merged.filter((a) => a.feedId === feed.id).map((a) => a.url),
+            ...dismissedUrls.keys(),
+          ]);
           const newArticles: Article[] = result.articles
             .filter((a) => !existingUrls.has(a.url ?? ""))
             .map((a) => ({
@@ -592,11 +646,22 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             }));
           merged = [...newArticles, ...merged];
         }
-        const sorted = expireArticles(
+        const { kept: sorted, expiredUrls } = expireArticles(
           merged.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
           feeds
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
+        if (expiredUrls.length > 0) {
+          setDismissedUrls((prev) => {
+            const next = new Map(prev);
+            const ts = Date.now();
+            for (const url of expiredUrls) {
+              if (url) next.set(url, ts);
+            }
+            AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...next.entries()]));
+            return next;
+          });
+        }
         return sorted;
       });
 
@@ -612,7 +677,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds]);
+  }, [feeds, dismissedUrls]);
 
   const updateFeedExpiry = useCallback(
     async (feedId: string, bucket: ExpiryBucket) => {
@@ -636,8 +701,17 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
 
   const dismissArticle = useCallback((articleId: string) => {
     setArticles((current) => {
+      const article = current.find((a) => a.id === articleId);
       const updated = current.filter((a) => a.id !== articleId);
       AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
+      if (article?.url) {
+        setDismissedUrls((prev) => {
+          const next = new Map(prev);
+          next.set(article.url, Date.now());
+          AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...next.entries()]));
+          return next;
+        });
+      }
       return updated;
     });
   }, []);

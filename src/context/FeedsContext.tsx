@@ -88,8 +88,26 @@ function extractImageFromContent(html: string): string | undefined {
   return match?.[1];
 }
 
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&rsquo;|&lsquo;/g, "\u2019")
+    .replace(/&rdquo;|&ldquo;/g, "\u201C")
+    .replace(/&mdash;/g, "\u2014")
+    .replace(/&ndash;/g, "\u2013")
+    .replace(/&hellip;/g, "\u2026")
+    .replace(/&[a-zA-Z][a-zA-Z0-9]*;/g, ""); // drop any remaining unknown named entities
+}
+
 function stripHtml(html: string): string {
-  return html?.replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim() ?? "";
+  return decodeEntities(html?.replace(/<[^>]*>/g, "") ?? "").trim();
 }
 
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {

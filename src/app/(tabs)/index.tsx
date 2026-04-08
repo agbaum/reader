@@ -65,6 +65,8 @@ export default function TodayScreen() {
   );
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
+  // Height the floating button occupies so list content starts below it
+  const menuAreaHeight = topPad + 8 + 36 + 8;
 
   const sidebarItems = [
     {
@@ -78,24 +80,6 @@ export default function TodayScreen() {
       onPress: () => setRecentlyReadOpen(true),
     },
   ];
-
-  const ListHeader = (
-    <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-      <View>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            setSidebarOpen(true);
-          }}
-          hitSlop={8}
-          style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.6 }]}
-        >
-          <Feather name="menu" size={20} color={Colors.light.text} />
-        </Pressable>
-        <PulsingDot visible={isRefreshing} />
-      </View>
-    </View>
-  );
 
   const ListEmpty = (
     <View style={styles.empty}>
@@ -115,15 +99,28 @@ export default function TodayScreen() {
         data={unreadArticles}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        ListHeaderComponent={ListHeader}
         ListEmptyComponent={ListEmpty}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         scrollEnabled={true}
         overScrollMode="always"
-
-        contentContainerStyle={styles.list}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        contentContainerStyle={[styles.list, { paddingTop: menuAreaHeight }]}
       />
+
+      <View style={[styles.floatingMenu, { top: topPad + 8 }]}>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            setSidebarOpen(true);
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.6 }]}
+        >
+          <Feather name="menu" size={20} color={Colors.light.text} />
+        </Pressable>
+        <PulsingDot visible={isRefreshing} />
+      </View>
 
       <Sidebar
         visible={sidebarOpen}
@@ -152,12 +149,10 @@ const styles = StyleSheet.create({
   list: {
     paddingBottom: Platform.OS === "web" ? 34 : 40,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+  floatingMenu: {
+    position: "absolute",
+    left: 20,
+    zIndex: 10,
   },
   dot: {
     position: "absolute",

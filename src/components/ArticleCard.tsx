@@ -1,7 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -15,6 +14,7 @@ import Animated, {
 
 import Colors from "@/constants/colors";
 import { Article, EXPIRY_DURATIONS, ExpiryBucket } from "@/context/FeedsContext";
+import { useOpenArticle } from "@/hooks/use-open-article";
 
 const EXPIRY_COLORS: Record<ExpiryBucket, string> = {
   "6h":  "#C97676", // soft red
@@ -27,7 +27,6 @@ const DISMISS_THRESHOLD = 110;
 
 interface ArticleCardProps {
   article: Article;
-  onMarkRead: (id: string) => void;
   onResetExpiry?: (id: string) => void;
   onDismiss?: (id: string) => void;
   showFeedName?: boolean;
@@ -49,12 +48,12 @@ function timeAgo(ts?: number): string {
 
 export function ArticleCard({
   article,
-  onMarkRead,
   onResetExpiry,
   onDismiss,
   showFeedName = true,
 }: ArticleCardProps) {
   const translateX = useSharedValue(0);
+  const openArticle = useOpenArticle();
 
   const expiryPct = useMemo(() => {
     if (!article.fetchedAt || !article.expiryBucket) return 1;
@@ -64,12 +63,8 @@ export function ArticleCard({
   }, [article.fetchedAt, article.expiryBucket]);
 
   const handlePress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onMarkRead(article.id);
-    if (article.url) {
-      WebBrowser.openBrowserAsync(article.url, { createTask: false });
-    }
-  }, [article, onMarkRead]);
+    openArticle(article);
+  }, [article, openArticle]);
 
   const handleLongPress = useCallback(() => {
     if (!onResetExpiry) return;

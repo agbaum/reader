@@ -52,7 +52,7 @@ function RefreshingBar({ visible }: { visible: boolean }) {
 }
 
 export default function TodayScreen() {
-  const { articles, isRefreshing, refreshFeeds, markAsRead, resetArticleExpiry, dismissArticle } = useFeeds();
+  const { articles, isRefreshing, refreshFeeds, resetArticleExpiry, dismissArticle } = useFeeds();
   const insets = useSafeAreaInsets();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [feedsPanelOpen, setFeedsPanelOpen] = useState(false);
@@ -65,9 +65,9 @@ export default function TodayScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: Article }) => (
-      <ArticleCard article={item} onMarkRead={markAsRead} onResetExpiry={resetArticleExpiry} onDismiss={dismissArticle} showFeedName />
+      <ArticleCard article={item} onResetExpiry={resetArticleExpiry} onDismiss={dismissArticle} showFeedName />
     ),
-    [markAsRead]
+    []
   );
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;

@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
 import React, { useCallback } from "react";
 import {
   FlatList,
@@ -14,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { Article, useFeeds } from "@/context/FeedsContext";
+import { useOpenArticle } from "@/hooks/use-open-article";
 
 function timeAgo(ts?: number): string {
   if (!ts) return "";
@@ -29,21 +29,10 @@ function timeAgo(ts?: number): string {
 }
 
 function ReadArticleRow({ article }: { article: Article }) {
+  const openArticle = useOpenArticle();
   const handlePress = useCallback(() => {
-    router.push({
-      pathname: "/article",
-      params: {
-        url: article.url,
-        title: article.title,
-        description: article.description ?? "",
-        imageUrl: article.imageUrl ?? "",
-        feedTitle: article.feedTitle ?? "",
-        author: article.author ?? "",
-        publishedAt: article.publishedAt?.toString() ?? "",
-        articleId: article.id,
-      },
-    });
-  }, [article]);
+    openArticle(article);
+  }, [article, openArticle]);
 
   return (
     <Pressable

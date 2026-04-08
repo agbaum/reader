@@ -20,34 +20,28 @@ import { Sidebar } from "@/components/Sidebar";
 import Colors from "@/constants/colors";
 import { Article, useFeeds } from "@/context/FeedsContext";
 
-function RefreshingBar({ visible }: { visible: boolean }) {
-  const spin = useRef(new Animated.Value(0)).current;
+function PulsingDot({ visible }: { visible: boolean }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const loopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     if (visible) {
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      opacity.setValue(1);
       loopRef.current = Animated.loop(
-        Animated.timing(spin, { toValue: 1, duration: 900, useNativeDriver: true, isInteraction: false })
+        Animated.sequence([
+          Animated.timing(opacity, { toValue: 0.25, duration: 550, useNativeDriver: true, isInteraction: false }),
+          Animated.timing(opacity, { toValue: 1, duration: 550, useNativeDriver: true, isInteraction: false }),
+        ])
       );
       loopRef.current.start();
     } else {
       loopRef.current?.stop();
-      spin.setValue(0);
-      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+      Animated.timing(opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start();
     }
   }, [visible]);
 
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
-
   return (
-    <Animated.View style={[styles.refreshBar, { opacity }]}>
-      <Animated.View style={{ transform: [{ rotate }] }}>
-        <Feather name="refresh-cw" size={13} color={Colors.light.accent} />
-      </Animated.View>
-      <Text style={styles.refreshBarText}>Updating feeds…</Text>
-    </Animated.View>
+    <Animated.View pointerEvents="none" style={[styles.dot, { opacity }]} />
   );
 }
 
@@ -87,17 +81,19 @@ export default function TodayScreen() {
 
   const ListHeader = (
     <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          setSidebarOpen(true);
-        }}
-        hitSlop={8}
-        style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.6 }]}
-      >
-        <Feather name="menu" size={20} color={Colors.light.text} />
-      </Pressable>
-      <RefreshingBar visible={isRefreshing} />
+      <View>
+        <Pressable
+          onPress={() => {
+            Haptics.selectionAsync();
+            setSidebarOpen(true);
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.6 }]}
+        >
+          <Feather name="menu" size={20} color={Colors.light.text} />
+        </Pressable>
+        <PulsingDot visible={isRefreshing} />
+      </View>
     </View>
   );
 
@@ -163,19 +159,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  refreshBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: Colors.light.accentLight,
-    borderRadius: 20,
-  },
-  refreshBarText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    color: Colors.light.accent,
+  dot: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: Colors.light.accent,
   },
   menuBtn: {
     width: 36,

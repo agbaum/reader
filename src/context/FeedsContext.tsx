@@ -291,7 +291,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  const [dismissedUrls, setDismissedUrls] = useState<Map<string, number>>(new Map());
+  const dismissedUrlsRef = useRef<Map<string, number>>(new Map());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const initialLoadDone = useRef(false);
 
@@ -314,12 +314,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         // Load and prune dismissed URLs older than the max expiry window
         const now = Date.now();
         const rawDismissed: [string, number][] = dismissedStr ? JSON.parse(dismissedStr) : [];
-        const prunedDismissed = new Map(
+        dismissedUrlsRef.current = new Map(
           rawDismissed.filter(([, ts]) => now - ts < MAX_DISMISSED_AGE)
         );
-        setDismissedUrls(prunedDismissed);
-        if (prunedDismissed.size !== rawDismissed.length) {
-          await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...prunedDismissed.entries()]));
+        if (dismissedUrlsRef.current.size !== rawDismissed.length) {
+          await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
         }
 
         setFeeds(loadedFeeds);
@@ -336,7 +335,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
 
               const existingUrls = new Set([
                 ...loadedArticles.filter((a) => a.feedId === feed.id).map((a) => a.url),
-                ...prunedDismissed.keys(),
+                ...dismissedUrlsRef.current.keys(),
               ]);
 
               const newArticles: Article[] = result.articles
@@ -378,10 +377,9 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           if (expiredUrls.length > 0) {
             const ts = Date.now();
             for (const url of expiredUrls) {
-              if (url) prunedDismissed.set(url, ts);
+              if (url) dismissedUrlsRef.current.set(url, ts);
             }
-            setDismissedUrls(new Map(prunedDismissed));
-            await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...prunedDismissed.entries()]));
+            await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
           }
 
           setFeeds([...loadedFeeds]);
@@ -416,7 +414,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveDismissedUrls = useCallback(async (m: Map<string, number>) => {
-    setDismissedUrls(m);
+    dismissedUrlsRef.current = m;
     await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...m.entries()]));
   }, []);
 
@@ -568,7 +566,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       setArticles((currentArticles) => {
         const existingUrls = new Set([
           ...currentArticles.filter((a) => a.feedId === feedId).map((a) => a.url),
-          ...dismissedUrls.keys(),
+          ...dismissedUrlsRef.current.keys(),
         ]);
         const newArticles: Article[] = result.articles
           .filter((a) => !existingUrls.has(a.url ?? ""))
@@ -590,15 +588,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         if (expiredUrls.length > 0) {
-          setDismissedUrls((prev) => {
-            const next = new Map(prev);
-            const ts = Date.now();
-            for (const url of expiredUrls) {
-              if (url) next.set(url, ts);
-            }
-            AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...next.entries()]));
-            return next;
-          });
+          const ts = Date.now();
+          for (const url of expiredUrls) {
+            if (url) dismissedUrlsRef.current.set(url, ts);
+          }
+          AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
         }
         return sorted;
       });
@@ -613,7 +607,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         return updated;
       });
     },
-    [feeds, dismissedUrls]
+    [feeds]
   );
 
   const refreshFeeds = useCallback(async () => {
@@ -632,7 +626,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           if (!result) continue;
           const existingUrls = new Set([
             ...merged.filter((a) => a.feedId === feed.id).map((a) => a.url),
-            ...dismissedUrls.keys(),
+            ...dismissedUrlsRef.current.keys(),
           ]);
           const newArticles: Article[] = result.articles
             .filter((a) => !existingUrls.has(a.url ?? ""))
@@ -656,15 +650,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         if (expiredUrls.length > 0) {
-          setDismissedUrls((prev) => {
-            const next = new Map(prev);
-            const ts = Date.now();
-            for (const url of expiredUrls) {
-              if (url) next.set(url, ts);
-            }
-            AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...next.entries()]));
-            return next;
-          });
+          const ts = Date.now();
+          for (const url of expiredUrls) {
+            if (url) dismissedUrlsRef.current.set(url, ts);
+          }
+          AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
         }
         return sorted;
       });
@@ -681,7 +671,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds, dismissedUrls]);
+  }, [feeds]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -718,12 +708,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const updated = current.filter((a) => a.id !== articleId);
       AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
       if (article?.url) {
-        setDismissedUrls((prev) => {
-          const next = new Map(prev);
-          next.set(article.url, Date.now());
-          AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...next.entries()]));
-          return next;
-        });
+        dismissedUrlsRef.current.set(article.url, Date.now());
+        AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
       }
       return updated;
     });

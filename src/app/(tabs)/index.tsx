@@ -4,8 +4,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
-
   StyleSheet,
   Text,
   View,
@@ -65,8 +66,36 @@ export default function TodayScreen() {
   );
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
-  // Height the floating button occupies so list content starts below it
-  const menuAreaHeight = topPad + 8 + 36 + 8;
+  const barHeight = topPad + 52;
+
+  const barTranslateY = useRef(new Animated.Value(0)).current;
+  const lastScrollY = useRef(0);
+  const barVisible = useRef(true);
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = e.nativeEvent.contentOffset.y;
+      const diff = y - lastScrollY.current;
+      lastScrollY.current = y;
+
+      if (diff > 4 && barVisible.current && y > barHeight) {
+        barVisible.current = false;
+        Animated.timing(barTranslateY, {
+          toValue: -barHeight,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      } else if (diff < -4 && !barVisible.current) {
+        barVisible.current = true;
+        Animated.timing(barTranslateY, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      }
+    },
+    [barHeight]
+  );
 
   const sidebarItems = [
     {
@@ -105,22 +134,31 @@ export default function TodayScreen() {
         scrollEnabled={true}
         overScrollMode="always"
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-        contentContainerStyle={[styles.list, { paddingTop: menuAreaHeight }]}
+        contentContainerStyle={[styles.list, { paddingTop: barHeight }]}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       />
 
-      <View style={[styles.floatingMenu, { top: topPad + 8 }]}>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            setSidebarOpen(true);
-          }}
-          hitSlop={8}
-          style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.6 }]}
-        >
-          <Feather name="menu" size={20} color={Colors.light.text} />
-        </Pressable>
-        <PulsingDot visible={isRefreshing} />
-      </View>
+      <Animated.View
+        style={[
+          styles.topBar,
+          { height: barHeight, transform: [{ translateY: barTranslateY }] },
+        ]}
+      >
+        <View style={[styles.topBarContent, { paddingTop: topPad }]}>
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              setSidebarOpen(true);
+            }}
+            hitSlop={8}
+            style={({ pressed }) => [styles.menuBtn, pressed && { opacity: 0.6 }]}
+          >
+            <Feather name="menu" size={20} color={Colors.light.text} />
+            <PulsingDot visible={isRefreshing} />
+          </Pressable>
+        </View>
+      </Animated.View>
 
       <Sidebar
         visible={sidebarOpen}
@@ -149,10 +187,21 @@ const styles = StyleSheet.create({
   list: {
     paddingBottom: Platform.OS === "web" ? 34 : 40,
   },
-  floatingMenu: {
+  topBar: {
     position: "absolute",
-    left: 20,
+    top: 0,
+    left: 0,
+    right: 0,
     zIndex: 10,
+    backgroundColor: Colors.light.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.light.border,
+  },
+  topBarContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
   },
   dot: {
     position: "absolute",
@@ -166,8 +215,6 @@ const styles = StyleSheet.create({
   menuBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.light.surfaceAlt,
     alignItems: "center",
     justifyContent: "center",
   },

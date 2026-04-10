@@ -23,7 +23,7 @@ const EXPIRY_COLORS: Record<ExpiryBucket, string> = {
   "7d":  "#74A87E", // soft green
 };
 
-const DISMISS_THRESHOLD = 110;
+const DISMISS_THRESHOLD = 80;
 
 interface ArticleCardProps {
   article: Article;
@@ -102,11 +102,19 @@ export function ArticleCard({
     opacity: Math.min(Math.abs(translateX.value) / DISMISS_THRESHOLD, 1),
   }));
 
+  const dismissIconStyle = useAnimatedStyle(() => ({
+    left: translateX.value >= 0 ? 20 : undefined,
+    right: translateX.value < 0 ? 20 : undefined,
+    flexDirection: translateX.value >= 0 ? "row" : "row-reverse",
+  }));
+
   return (
     <View style={styles.rowContainer}>
       <Animated.View style={[styles.dismissBg, bgOpacityStyle]}>
-        <Feather name="archive" size={18} color={Colors.light.accent} />
-        <Text style={styles.dismissLabel}>Dismiss</Text>
+        <Animated.View style={[styles.dismissContent, dismissIconStyle]}>
+          <Feather name="archive" size={18} color={Colors.light.accent} />
+          <Text style={styles.dismissLabel}>Dismiss</Text>
+        </Animated.View>
       </Animated.View>
 
       <GestureDetector gesture={gesture}>
@@ -179,9 +187,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#EDD5C8",
     borderRadius: 14,
+  },
+  dismissContent: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 8,
   },
   dismissLabel: {

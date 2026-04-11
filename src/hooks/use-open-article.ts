@@ -1,20 +1,18 @@
 import * as Haptics from "expo-haptics";
-import * as WebBrowser from "expo-web-browser";
+import { useRouter } from "expo-router";
 import { useCallback } from "react";
 
-import { Article, useFeeds } from "@/context/FeedsContext";
+import { Article } from "@/context/FeedsContext";
 
 export function useOpenArticle() {
-  const { markAsRead, refreshFeeds } = useFeeds();
+  const router = useRouter();
   return useCallback(
-    async (article: Article) => {
+    (article: Article) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      markAsRead(article.id);
       if (article.url) {
-        await WebBrowser.openBrowserAsync(article.url, { createTask: false });
-        refreshFeeds();
+        router.push({ pathname: "/article", params: { id: article.id } });
       }
     },
-    [markAsRead, refreshFeeds]
+    [router]
   );
 }

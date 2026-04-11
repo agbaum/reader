@@ -49,6 +49,7 @@ export interface Article {
   publishedAt?: number;
   fetchedAt?: number;
   isRead: boolean;
+  scrollProgress?: number;
   author?: string;
   expiryBucket?: ExpiryBucket;
 }
@@ -68,6 +69,7 @@ interface FeedsContextValue {
   renameFeed: (feedId: string, customTitle: string) => Promise<void>;
   resetArticleExpiry: (articleId: string) => Promise<void>;
   dismissArticle: (articleId: string) => void;
+  saveScrollProgress: (articleId: string, progress: number) => void;
   unreadCount: number;
 }
 
@@ -76,6 +78,7 @@ const FeedsContext = createContext<FeedsContextValue | null>(null);
 const FEEDS_KEY = "rss_feeds_v2";
 const ARTICLES_KEY = "rss_articles_v2";
 const READ_KEY = "rss_read_ids_v2";
+const PROGRESS_KEY = "rss_progress_v2";
 const DISMISSED_URLS_KEY = "rss_dismissed_urls_v2";
 const MAX_DISMISSED_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days — matches the longest expiry bucket
 
@@ -338,6 +341,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
   const dismissedUrlsRef = useRef<Map<string, number>>(new Map());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const initialLoadDone = useRef(false);
@@ -345,10 +349,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [feedsStr, articlesStr, readStr, dismissedStr] = await Promise.all([
+        const [feedsStr, articlesStr, readStr, progressStr, dismissedStr] = await Promise.all([
           AsyncStorage.getItem(FEEDS_KEY),
           AsyncStorage.getItem(ARTICLES_KEY),
           AsyncStorage.getItem(READ_KEY),
+          AsyncStorage.getItem(PROGRESS_KEY),
           AsyncStorage.getItem(DISMISSED_URLS_KEY),
         ]);
 
@@ -357,6 +362,9 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         const loadedReadIds: Set<string> = readStr
           ? new Set(JSON.parse(readStr))
           : new Set();
+        const loadedProgress: Record<string, number> = progressStr
+          ? JSON.parse(progressStr)
+          : {};
 
         // Load and prune dismissed URLs older than the max expiry window
         const now = Date.now();
@@ -371,6 +379,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         setFeeds(loadedFeeds);
         setArticles(loadedArticles);
         setReadIds(loadedReadIds);
+        setProgressMap(loadedProgress);
 
         // Background refresh using loaded data directly (avoids stale closure)
         if (loadedFeeds.length > 0) {
@@ -458,6 +467,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const saveReadIds = useCallback(async (ids: Set<string>) => {
     setReadIds(ids);
     await AsyncStorage.setItem(READ_KEY, JSON.stringify([...ids]));
+  }, []);
+
+  const saveScrollProgress = useCallback((articleId: string, progress: number) => {
+    setProgressMap((current) => {
+      const updated = { ...current, [articleId]: progress };
+      AsyncStorage.setItem(PROGRESS_KEY, JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const saveDismissedUrls = useCallback(async (m: Map<string, number>) => {
@@ -779,6 +796,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       ...a,
       feedTitle: feed?.customTitle ?? a.feedTitle,
       isRead: readIds.has(a.id),
+      scrollProgress: progressMap[a.id],
       expiryBucket: feed?.expiryBucket ?? "3d",
     };
   });
@@ -802,6 +820,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         renameFeed,
         resetArticleExpiry,
         dismissArticle,
+        saveScrollProgress,
         unreadCount,
       }}
     >

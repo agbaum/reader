@@ -130,6 +130,11 @@ export function ArticleCard({
                 <View style={[styles.expiryFill, { flex: expiryPct, backgroundColor: EXPIRY_COLORS[article.expiryBucket] }]} />
               </View>
             )}
+            {!!article.scrollProgress && article.scrollProgress < 0.9 && (
+              <View style={styles.readingProgressTrack}>
+                <View style={[styles.readingProgressFill, { width: `${Math.round(article.scrollProgress * 100)}%` }]} />
+              </View>
+            )}
             <View style={styles.content}>
               <View style={styles.meta}>
                 {showFeedName && (
@@ -225,6 +230,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   expiryFill: {},
+  readingProgressTrack: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: Colors.light.border,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    overflow: "hidden",
+  },
+  readingProgressFill: {
+    height: 2,
+    backgroundColor: Colors.light.accent,
+    opacity: 0.6,
+  },
   content: {
     flex: 1,
     gap: 8,

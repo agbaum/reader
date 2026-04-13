@@ -17,7 +17,7 @@ import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
 
 // Injected into the page to report scroll progress and restore position
-function buildInjectedJS(restoreProgress: number): string {
+function buildInjectedJS(restoreProgress: number, articleUrl: string): string {
   return `
     (function() {
       var restored = false;
@@ -33,12 +33,13 @@ function buildInjectedJS(restoreProgress: number): string {
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'scroll', progress: progress }));
       }
       window.addEventListener('scroll', sendProgress, { passive: true });
-      // Restore saved position after page settles
+      // Restore saved position only on the original article page
       ${
         restoreProgress > 0
           ? `
       function tryRestore() {
         if (restored) return;
+        if (window.location.href !== ${JSON.stringify(articleUrl)}) return;
         var h = getDocHeight();
         if (h > 100) {
           window.scrollTo(0, ${restoreProgress} * h);
@@ -139,7 +140,7 @@ export default function ArticleScreen() {
         style={[styles.webview, { marginTop: barHeight }]}
         // Spoof a real Chrome UA so paywalled/UA-sniffing sites render properly
         applicationNameForUserAgent="Chrome/124.0.0.0 Mobile Safari/537.36"
-        injectedJavaScript={buildInjectedJS(savedProgress)}
+        injectedJavaScript={buildInjectedJS(savedProgress, article.url)}
         onMessage={handleMessage}
         onNavigationStateChange={handleNavigationStateChange}
         javaScriptEnabled

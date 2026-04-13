@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,23 +17,45 @@ import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
 
-// Injected into the page to report scroll progress and restore position
+// Injected into the page to report scroll progress, restore position,
+// and detect overscroll-to-close at the bottom.
 function buildInjectedJS(restoreProgress: number, articleUrl: string): string {
   return `
     (function() {
       var restored = false;
+      var atBottom = false;
+      var touchStartY = 0;
+      var dismissed = false;
+
       function getDocHeight() {
         return Math.max(
           document.body.scrollHeight,
           document.documentElement.scrollHeight
         ) - window.innerHeight;
       }
+
       function sendProgress() {
         var h = getDocHeight();
         var progress = h > 0 ? window.scrollY / h : 0;
+        atBottom = h <= 0 || window.scrollY >= h - 2;
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'scroll', progress: progress }));
       }
       window.addEventListener('scroll', sendProgress, { passive: true });
+
+      // Overscroll-to-close: swipe up past threshold when already at bottom
+      window.addEventListener('touchstart', function(e) {
+        touchStartY = e.touches[0].clientY;
+      }, { passive: true });
+
+      window.addEventListener('touchmove', function(e) {
+        if (dismissed || !atBottom) return;
+        var dy = touchStartY - e.touches[0].clientY; // positive = finger moving up
+        if (dy > 60) {
+          dismissed = true;
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dismiss' }));
+        }
+      }, { passive: true });
+
       // Restore saved position only on the original article page
       ${
         restoreProgress > 0
@@ -61,16 +84,32 @@ export default function ArticleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const { articles, markAsRead, saveScrollProgress } = useFeeds();
 
   const article = articles.find((a) => a.id === id);
   const savedProgress = article?.scrollProgress ?? 0;
 
   const progressAnim = useRef(new Animated.Value(savedProgress)).current;
+  const containerTranslateY = useRef(new Animated.Value(0)).current;
   const [progressWidth, setProgressWidth] = useState(savedProgress);
   const hasMarkedRead = useRef(article?.isRead ?? false);
   const latestProgress = useRef(savedProgress);
   const isOnOriginalPage = useRef(true);
+  const isDismissing = useRef(false);
+
+  const dismissUp = useCallback(() => {
+    if (isDismissing.current) return;
+    isDismissing.current = true;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.timing(containerTranslateY, {
+      toValue: -screenHeight,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      router.back();
+    });
+  }, [containerTranslateY, screenHeight, router]);
 
   const handleNavigationStateChange = useCallback(
     ({ url }: { url: string }) => {
@@ -85,6 +124,12 @@ export default function ArticleScreen() {
     (event: WebViewMessageEvent) => {
       try {
         const data = JSON.parse(event.nativeEvent.data);
+
+        if (data.type === "dismiss") {
+          dismissUp();
+          return;
+        }
+
         if (data.type !== "scroll" || !id || !isOnOriginalPage.current) return;
 
         const p: number = Math.min(1, Math.max(0, data.progress));
@@ -107,7 +152,7 @@ export default function ArticleScreen() {
         // ignore malformed messages
       }
     },
-    [id, markAsRead, saveScrollProgress, progressAnim]
+    [id, markAsRead, saveScrollProgress, progressAnim, dismissUp]
   );
 
   const openInBrowser = useCallback(() => {
@@ -134,7 +179,9 @@ export default function ArticleScreen() {
   const barHeight = barTop + 48;
 
   return (
-    <View style={styles.container}>
+    <Animated.View
+      style={[styles.container, { transform: [{ translateY: containerTranslateY }] }]}
+    >
       <WebView
         source={{ uri: article.url }}
         style={[styles.webview, { marginTop: barHeight }]}
@@ -195,7 +242,7 @@ export default function ArticleScreen() {
           />
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

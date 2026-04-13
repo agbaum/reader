@@ -49,7 +49,9 @@ export interface Article {
   publishedAt?: number;
   fetchedAt?: number;
   isRead: boolean;
+  dismissed?: boolean;
   scrollProgress?: number;
+  lastReadAt?: number;
   author?: string;
   expiryBucket?: ExpiryBucket;
 }
@@ -470,9 +472,17 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveScrollProgress = useCallback((articleId: string, progress: number) => {
+    const now = Date.now();
     setProgressMap((current) => {
       const updated = { ...current, [articleId]: progress };
       AsyncStorage.setItem(PROGRESS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    setArticles((current) => {
+      const updated = current.map((a) =>
+        a.id === articleId ? { ...a, lastReadAt: now } : a
+      );
+      AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
       return updated;
     });
   }, []);
@@ -769,7 +779,12 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const dismissArticle = useCallback((articleId: string) => {
     setArticles((current) => {
       const article = current.find((a) => a.id === articleId);
-      const updated = current.filter((a) => a.id !== articleId);
+      const hasProgress = (progressMap[articleId] ?? 0) > 0;
+      // Keep articles with scroll progress so they remain in Recently Read;
+      // fully-unread dismissed articles can be removed entirely.
+      const updated = hasProgress
+        ? current.map((a) => (a.id === articleId ? { ...a, dismissed: true } : a))
+        : current.filter((a) => a.id !== articleId);
       AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
       if (article?.url) {
         dismissedUrlsRef.current.set(article.url, Date.now());
@@ -777,7 +792,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       }
       return updated;
     });
-  }, []);
+  }, [progressMap]);
 
   const resetArticleExpiry = useCallback(async (articleId: string) => {
     setArticles((current) => {

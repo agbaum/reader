@@ -34,6 +34,9 @@ function ReadArticleRow({ article }: { article: Article }) {
     openArticle(article);
   }, [article, openArticle]);
 
+  const progress = article.isRead ? 1 : (article.scrollProgress ?? 0);
+  const progressPct = `${Math.round(progress * 100)}%`;
+
   return (
     <Pressable
       onPress={handlePress}
@@ -49,6 +52,9 @@ function ReadArticleRow({ article }: { article: Article }) {
         <Text style={styles.meta}>{timeAgo(article.publishedAt)}</Text>
       </View>
       <Feather name="chevron-right" size={16} color={Colors.light.textTertiary} />
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: progressPct }]} />
+      </View>
     </Pressable>
   );
 }
@@ -63,8 +69,8 @@ export function RecentlyReadPanel({ visible, onClose }: RecentlyReadPanelProps) 
   const insets = useSafeAreaInsets();
 
   const readArticles = articles
-    .filter((a) => a.isRead)
-    .sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0));
+    .filter((a) => a.isRead || (a.scrollProgress ?? 0) > 0)
+    .sort((a, b) => (b.lastReadAt ?? b.publishedAt ?? 0) - (a.lastReadAt ?? a.publishedAt ?? 0));
 
   const renderItem = useCallback(
     ({ item }: { item: Article }) => <ReadArticleRow article={item} />,
@@ -179,6 +185,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     gap: 12,
+    overflow: "hidden",
   },
   rowContent: {
     flex: 1,
@@ -201,6 +208,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textTertiary,
+  },
+  progressTrack: {
+    position: "absolute",
+    bottom: 0,
+    left: 20,
+    right: 0,
+    height: 2,
+    backgroundColor: Colors.light.separator,
+  },
+  progressFill: {
+    height: 2,
+    backgroundColor: Colors.light.accent,
   },
   separator: {
     height: 1,

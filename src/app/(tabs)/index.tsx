@@ -54,7 +54,7 @@ export default function TodayScreen() {
   const [recentlyReadOpen, setRecentlyReadOpen] = useState(false);
 
   const unreadArticles = useMemo(
-    () => articles.filter((a) => !a.isRead),
+    () => articles.filter((a) => !a.isRead && !a.dismissed),
     [articles]
   );
 

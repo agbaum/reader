@@ -126,8 +126,7 @@ export default function ArticleScreen() {
     <View style={styles.container}>
       <WebView
         source={{ uri: article.url }}
-        style={styles.webview}
-        contentInset={{ top: barHeight }}
+        style={[styles.webview, { marginTop: barHeight }]}
         // Spoof a real Chrome UA so paywalled/UA-sniffing sites render properly
         applicationNameForUserAgent="Chrome/124.0.0.0 Mobile Safari/537.36"
         injectedJavaScript={buildInjectedJS(savedProgress)}

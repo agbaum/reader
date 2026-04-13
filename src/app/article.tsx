@@ -106,18 +106,6 @@ export default function ArticleScreen() {
     }
   }, [article?.url]);
 
-  const openHomepage = useCallback(() => {
-    if (article?.url) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      try {
-        const { origin } = new URL(article.url);
-        WebBrowser.openBrowserAsync(origin, { createTask: false });
-      } catch {
-        WebBrowser.openBrowserAsync(article.url, { createTask: false });
-      }
-    }
-  }, [article?.url]);
-
   const handleBack = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.back();
@@ -163,7 +151,7 @@ export default function ArticleScreen() {
             hitSlop={8}
             style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
           >
-            <Feather name="chevron-down" size={22} color={Colors.light.text} />
+            <Feather name="x" size={22} color={Colors.light.text} />
           </Pressable>
 
           <Text style={styles.feedTitle} numberOfLines={1}>
@@ -171,13 +159,6 @@ export default function ArticleScreen() {
           </Text>
 
           <View style={styles.actions}>
-            <Pressable
-              onPress={openHomepage}
-              hitSlop={8}
-              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
-            >
-              <Feather name="log-in" size={18} color={Colors.light.textSecondary} />
-            </Pressable>
             <Pressable
               onPress={openInBrowser}
               hitSlop={8}

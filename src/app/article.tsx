@@ -69,12 +69,22 @@ export default function ArticleScreen() {
   const [progressWidth, setProgressWidth] = useState(savedProgress);
   const hasMarkedRead = useRef(article?.isRead ?? false);
   const latestProgress = useRef(savedProgress);
+  const isOnOriginalPage = useRef(true);
+
+  const handleNavigationStateChange = useCallback(
+    ({ url }: { url: string }) => {
+      if (url && article?.url && url !== article.url) {
+        isOnOriginalPage.current = false;
+      }
+    },
+    [article?.url]
+  );
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
         const data = JSON.parse(event.nativeEvent.data);
-        if (data.type !== "scroll" || !id) return;
+        if (data.type !== "scroll" || !id || !isOnOriginalPage.current) return;
 
         const p: number = Math.min(1, Math.max(0, data.progress));
         latestProgress.current = p;
@@ -131,6 +141,7 @@ export default function ArticleScreen() {
         applicationNameForUserAgent="Chrome/124.0.0.0 Mobile Safari/537.36"
         injectedJavaScript={buildInjectedJS(savedProgress)}
         onMessage={handleMessage}
+        onNavigationStateChange={handleNavigationStateChange}
         javaScriptEnabled
         domStorageEnabled
         sharedCookiesEnabled

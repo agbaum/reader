@@ -5,6 +5,7 @@ import {
   Modal,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -28,7 +29,7 @@ interface Props {
 }
 
 export function FeedSettingsSheet({ feed, onClose }: Props) {
-  const { updateFeedExpiry, renameFeed, removeFeed } = useFeeds();
+  const { updateFeedExpiry, updateFeedReaderMode, renameFeed, removeFeed } = useFeeds();
   const insets = useSafeAreaInsets();
   const lastFeedRef = useRef(feed);
   if (feed) lastFeedRef.current = feed;
@@ -64,6 +65,7 @@ export function FeedSettingsSheet({ feed, onClose }: Props) {
   if (!displayFeed) return null;
 
   const current = displayFeed.expiryBucket ?? "3d";
+  const readerModeEnabled = displayFeed.readerMode ?? true;
 
   return (
     <Modal
@@ -103,6 +105,23 @@ export function FeedSettingsSheet({ feed, onClose }: Props) {
           >
             <Text style={styles.saveBtnText}>Save</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.toggleRow}>
+          <View>
+            <Text style={styles.toggleLabel}>Reader mode</Text>
+            <Text style={styles.toggleDesc}>Open articles in a clean reading view</Text>
+          </View>
+          <Switch
+            value={readerModeEnabled}
+            onValueChange={(val) => {
+              if (!feed) return;
+              Haptics.selectionAsync();
+              updateFeedReaderMode(feed.id, val);
+            }}
+            trackColor={{ false: Colors.light.border, true: Colors.light.accent }}
+            thumbColor="#fff"
+          />
         </View>
 
         <Text style={styles.sectionLabel}>Article expiry</Text>
@@ -208,6 +227,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: "#fff",
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.light.surface,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    color: Colors.light.text,
+    marginBottom: 2,
+  },
+  toggleDesc: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: Colors.light.textSecondary,
   },
   sectionLabel: {
     fontSize: 12,

@@ -1,9 +1,12 @@
+import { Readability } from "@mozilla/readability";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useRef, useState } from "react";
+import { parseHTML } from "linkedom";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Pressable,
   StyleSheet,
@@ -17,15 +20,113 @@ import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
 
-// Injected into the page to report scroll progress, restore position,
-// and detect overscroll-to-close at the bottom.
-function buildInjectedJS(restoreProgress: number, articleUrl: string): string {
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function buildReaderHtml(
+  title: string,
+  byline: string | null,
+  content: string,
+  articleUrl: string
+): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<base href="${escapeHtml(articleUrl)}">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: ${Colors.light.background};
+    color: ${Colors.light.text};
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 18px;
+    line-height: 1.75;
+    padding: 24px 20px 80px;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  h1.reader-title {
+    font-size: 24px;
+    line-height: 1.3;
+    margin-bottom: 10px;
+    font-family: Georgia, serif;
+    font-weight: bold;
+  }
+  .reader-byline {
+    color: ${Colors.light.textSecondary};
+    font-size: 14px;
+    margin-bottom: 28px;
+    font-family: -apple-system, sans-serif;
+    border-bottom: 1px solid ${Colors.light.border};
+    padding-bottom: 20px;
+  }
+  h2 { font-size: 20px; margin: 28px 0 12px; line-height: 1.3; }
+  h3 { font-size: 18px; margin: 24px 0 10px; line-height: 1.3; }
+  h4, h5, h6 { font-size: 16px; margin: 20px 0 8px; }
+  p { margin-bottom: 18px; }
+  a { color: ${Colors.light.accent}; text-decoration: none; }
+  img { max-width: 100%; height: auto; border-radius: 4px; margin: 16px 0; display: block; }
+  blockquote {
+    border-left: 3px solid ${Colors.light.border};
+    padding-left: 16px;
+    color: ${Colors.light.textSecondary};
+    margin: 20px 0;
+    font-style: italic;
+  }
+  pre {
+    background: ${Colors.light.surfaceAlt};
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-bottom: 18px;
+  }
+  code {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    background: ${Colors.light.surfaceAlt};
+    padding: 2px 5px;
+    border-radius: 3px;
+  }
+  pre code { background: none; padding: 0; font-size: 13px; }
+  ul, ol { padding-left: 24px; margin-bottom: 18px; }
+  li { margin-bottom: 6px; }
+  figure { margin: 20px 0; }
+  figcaption {
+    font-size: 13px;
+    color: ${Colors.light.textSecondary};
+    margin-top: 8px;
+    text-align: center;
+    font-family: -apple-system, sans-serif;
+  }
+  hr { border: none; border-top: 1px solid ${Colors.light.border}; margin: 28px 0; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 15px; }
+  th, td { border: 1px solid ${Colors.light.border}; padding: 8px 10px; }
+  th { background: ${Colors.light.surfaceAlt}; font-weight: 600; }
+  .hidden, [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <h1 class="reader-title">${escapeHtml(title)}</h1>
+  ${byline ? `<div class="reader-byline">${escapeHtml(byline)}</div>` : ""}
+  ${content}
+</body>
+</html>`;
+}
+
+// Injected into the page to report scroll progress and detect overscroll-to-close.
+function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMode: boolean): string {
   return `
     (function() {
-      var restored = false;
       var atBottom = false;
       var touchStartY = 0;
       var dismissed = false;
+      ${restoreProgress > 0 ? "var restored = false;" : ""}
 
       function getDocHeight() {
         return Math.max(
@@ -49,17 +150,30 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string): string {
 
       window.addEventListener('touchmove', function(e) {
         if (dismissed || !atBottom) return;
-        var dy = touchStartY - e.touches[0].clientY; // positive = finger moving up
+        var dy = touchStartY - e.touches[0].clientY;
         if (dy > 60) {
           dismissed = true;
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dismiss' }));
         }
       }, { passive: true });
 
-      // Restore saved position only on the original article page
       ${
         restoreProgress > 0
-          ? `
+          ? isReaderMode
+            ? `
+      function tryRestore() {
+        if (restored) return;
+        var h = getDocHeight();
+        if (h > 100) {
+          window.scrollTo(0, ${restoreProgress} * h);
+          restored = true;
+        }
+      }
+      document.addEventListener('DOMContentLoaded', tryRestore);
+      setTimeout(tryRestore, 300);
+      setTimeout(tryRestore, 1000);
+      `
+            : `
       function tryRestore() {
         if (restored) return;
         if (window.location.href !== ${JSON.stringify(articleUrl)}) return;
@@ -80,23 +194,73 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string): string {
   `;
 }
 
+async function fetchAndExtract(url: string): Promise<string | null> {
+  const response = await fetch(url);
+  const html = await response.text();
+  const { document } = parseHTML(html);
+  const reader = new Readability(document as unknown as Document);
+  const result = reader.parse();
+  if (!result) return null;
+  return buildReaderHtml(result.title ?? "", result.byline ?? null, result.content ?? "", url);
+}
+
 export default function ArticleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
-  const { articles, markAsRead, saveScrollProgress } = useFeeds();
+  const { feeds, articles, markAsRead, saveScrollProgress, saveReaderScrollProgress } = useFeeds();
 
   const article = articles.find((a) => a.id === id);
-  const savedProgress = article?.scrollProgress ?? 0;
+  const feed = article ? feeds.find((f) => f.id === article.feedId) : undefined;
+  const feedReaderMode = feed?.readerMode ?? true;
 
-  const progressAnim = useRef(new Animated.Value(savedProgress)).current;
+  const savedLiveProgress = article?.scrollProgress ?? 0;
+  const savedReaderProgress = article?.readerScrollProgress ?? 0;
+
+  const [readerHtml, setReaderHtml] = useState<string | null>(null);
+  const [readerLoading, setReaderLoading] = useState(true);
+  const [liveMode, setLiveMode] = useState(!feedReaderMode);
+
+  const initialProgress = feedReaderMode ? savedReaderProgress : savedLiveProgress;
+  const progressAnim = useRef(new Animated.Value(initialProgress)).current;
   const containerTranslateY = useRef(new Animated.Value(0)).current;
-  const [progressWidth, setProgressWidth] = useState(savedProgress);
+  const [progressWidth, setProgressWidth] = useState(initialProgress);
   const hasMarkedRead = useRef(article?.isRead ?? false);
-  const latestProgress = useRef(savedProgress);
+  const latestProgress = useRef(initialProgress);
   const isOnOriginalPage = useRef(true);
   const isDismissing = useRef(false);
+
+  const isReaderMode = !liveMode;
+
+  useEffect(() => {
+    if (!article) return;
+    let cancelled = false;
+
+    setReaderLoading(true);
+    setReaderHtml(null);
+
+    fetchAndExtract(article.url)
+      .then((html) => {
+        if (cancelled) return;
+        if (html) {
+          setReaderHtml(html);
+        } else {
+          // Readability couldn't parse — fall back to live
+          setLiveMode(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLiveMode(true);
+      })
+      .finally(() => {
+        if (!cancelled) setReaderLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [article?.url]);
 
   const dismissUp = useCallback(() => {
     if (isDismissing.current) return;
@@ -113,11 +277,13 @@ export default function ArticleScreen() {
 
   const handleNavigationStateChange = useCallback(
     ({ url }: { url: string }) => {
+      // In reader mode, we never navigate away — always treat as original page
+      if (isReaderMode) return;
       if (url && article?.url && url !== article.url) {
         isOnOriginalPage.current = false;
       }
     },
-    [article?.url]
+    [article?.url, isReaderMode]
   );
 
   const handleMessage = useCallback(
@@ -142,7 +308,11 @@ export default function ArticleScreen() {
         }).start();
         setProgressWidth(p);
 
-        saveScrollProgress(id, p);
+        if (isReaderMode) {
+          saveReaderScrollProgress(id, p);
+        } else {
+          saveScrollProgress(id, p);
+        }
 
         if (!hasMarkedRead.current && p >= 0.9) {
           hasMarkedRead.current = true;
@@ -152,7 +322,7 @@ export default function ArticleScreen() {
         // ignore malformed messages
       }
     },
-    [id, markAsRead, saveScrollProgress, progressAnim, dismissUp]
+    [id, isReaderMode, markAsRead, saveScrollProgress, saveReaderScrollProgress, progressAnim, dismissUp]
   );
 
   const openInBrowser = useCallback(() => {
@@ -167,6 +337,19 @@ export default function ArticleScreen() {
     router.back();
   }, [router]);
 
+  const toggleMode = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    isOnOriginalPage.current = true;
+    setLiveMode((prev) => {
+      const nextIsReaderMode = prev; // toggling: if currently live, next is reader
+      const nextProgress = nextIsReaderMode ? savedReaderProgress : savedLiveProgress;
+      progressAnim.setValue(nextProgress);
+      setProgressWidth(nextProgress);
+      latestProgress.current = nextProgress;
+      return !prev;
+    });
+  }, [savedReaderProgress, savedLiveProgress, progressAnim]);
+
   if (!article) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -178,23 +361,38 @@ export default function ArticleScreen() {
   const barTop = insets.top;
   const barHeight = barTop + 48;
 
+  const webviewSource = liveMode
+    ? { uri: article.url }
+    : readerHtml
+      ? { html: readerHtml }
+      : null;
+
+  const savedProgress = isReaderMode ? savedReaderProgress : savedLiveProgress;
+  const injectedJS = buildInjectedJS(savedProgress, article.url, isReaderMode);
+
   return (
     <Animated.View
       style={[styles.container, { transform: [{ translateY: containerTranslateY }] }]}
     >
-      <WebView
-        source={{ uri: article.url }}
-        style={[styles.webview, { marginTop: barHeight }]}
-        // Spoof a real Chrome UA so paywalled/UA-sniffing sites render properly
-        applicationNameForUserAgent="Chrome/124.0.0.0 Mobile Safari/537.36"
-        injectedJavaScript={buildInjectedJS(savedProgress, article.url)}
-        onMessage={handleMessage}
-        onNavigationStateChange={handleNavigationStateChange}
-        javaScriptEnabled
-        domStorageEnabled
-        sharedCookiesEnabled
-        thirdPartyCookiesEnabled
-      />
+      {readerLoading && !liveMode ? (
+        <View style={[styles.loadingContainer, { marginTop: barHeight }]}>
+          <ActivityIndicator size="small" color={Colors.light.textSecondary} />
+        </View>
+      ) : webviewSource ? (
+        <WebView
+          key={liveMode ? "live" : "reader"}
+          source={webviewSource}
+          style={[styles.webview, { marginTop: barHeight }]}
+          applicationNameForUserAgent="Chrome/124.0.0.0 Mobile Safari/537.36"
+          injectedJavaScript={injectedJS}
+          onMessage={handleMessage}
+          onNavigationStateChange={handleNavigationStateChange}
+          javaScriptEnabled
+          domStorageEnabled
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+        />
+      ) : null}
 
       {/* Top bar */}
       <View
@@ -217,6 +415,19 @@ export default function ArticleScreen() {
           </Text>
 
           <View style={styles.actions}>
+            {!readerLoading && readerHtml && (
+              <Pressable
+                onPress={toggleMode}
+                hitSlop={8}
+                style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
+              >
+                <Feather
+                  name={liveMode ? "book-open" : "globe"}
+                  size={18}
+                  color={liveMode ? Colors.light.textSecondary : Colors.light.accent}
+                />
+              </Pressable>
+            )}
             <Pressable
               onPress={openInBrowser}
               hitSlop={8}
@@ -254,6 +465,11 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: Colors.light.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   topBar: {
     position: "absolute",

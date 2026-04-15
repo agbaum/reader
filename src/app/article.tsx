@@ -222,12 +222,13 @@ export default function ArticleScreen() {
   const [readerLoading, setReaderLoading] = useState(true);
   const [liveMode, setLiveMode] = useState(!feedReaderMode);
 
-  const initialProgress = feedReaderMode ? savedReaderProgress : savedLiveProgress;
-  const progressAnim = useRef(new Animated.Value(initialProgress)).current;
+  const readerProgressRef = useRef(savedReaderProgress);
+  const liveProgressRef = useRef(savedLiveProgress);
+  const maxProgress = Math.max(savedReaderProgress, savedLiveProgress);
+  const progressAnim = useRef(new Animated.Value(maxProgress)).current;
   const containerTranslateY = useRef(new Animated.Value(0)).current;
-  const [progressWidth, setProgressWidth] = useState(initialProgress);
+  const [progressWidth, setProgressWidth] = useState(maxProgress);
   const hasMarkedRead = useRef(article?.isRead ?? false);
-  const latestProgress = useRef(initialProgress);
   const isOnOriginalPage = useRef(true);
   const isDismissing = useRef(false);
 
@@ -299,22 +300,24 @@ export default function ArticleScreen() {
         if (data.type !== "scroll" || !id || !isOnOriginalPage.current) return;
 
         const p: number = Math.min(1, Math.max(0, data.progress));
-        latestProgress.current = p;
-
-        Animated.timing(progressAnim, {
-          toValue: p,
-          duration: 100,
-          useNativeDriver: false,
-        }).start();
-        setProgressWidth(p);
 
         if (isReaderMode) {
+          readerProgressRef.current = p;
           saveReaderScrollProgress(id, p);
         } else {
+          liveProgressRef.current = p;
           saveScrollProgress(id, p);
         }
 
-        if (!hasMarkedRead.current && p >= 0.9) {
+        const barProgress = Math.max(readerProgressRef.current, liveProgressRef.current);
+        Animated.timing(progressAnim, {
+          toValue: barProgress,
+          duration: 100,
+          useNativeDriver: false,
+        }).start();
+        setProgressWidth(barProgress);
+
+        if (!hasMarkedRead.current && barProgress >= 0.9) {
           hasMarkedRead.current = true;
           markAsRead(id);
         }
@@ -340,15 +343,8 @@ export default function ArticleScreen() {
   const toggleMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     isOnOriginalPage.current = true;
-    setLiveMode((prev) => {
-      const nextIsReaderMode = prev; // toggling: if currently live, next is reader
-      const nextProgress = nextIsReaderMode ? savedReaderProgress : savedLiveProgress;
-      progressAnim.setValue(nextProgress);
-      setProgressWidth(nextProgress);
-      latestProgress.current = nextProgress;
-      return !prev;
-    });
-  }, [savedReaderProgress, savedLiveProgress, progressAnim]);
+    setLiveMode((prev) => !prev);
+  }, []);
 
   if (!article) {
     return (

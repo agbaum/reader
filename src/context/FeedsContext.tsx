@@ -323,7 +323,9 @@ async function fetchFeedData(
   }
 }
 
-function expireArticles(articles: Article[], feeds: Feed[]): { kept: Article[]; expiredUrls: string[] } {
+const READ_GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000; // 1 week after normal expiry
+
+function expireArticles(articles: Article[], feeds: Feed[], readIds: Set<string>): { kept: Article[]; expiredUrls: string[] } {
   const feedMap = new Map(feeds.map((f) => [f.id, f]));
   const kept: Article[] = [];
   const expiredUrls: string[] = [];
@@ -334,8 +336,9 @@ function expireArticles(articles: Article[], feeds: Feed[]): { kept: Article[]; 
       continue;
     }
     const duration = EXPIRY_DURATIONS[feed.expiryBucket ?? "3d"];
+    const grace = readIds.has(article.id) ? READ_GRACE_PERIOD : 0;
     const age = Date.now() - (article.fetchedAt ?? article.publishedAt ?? 0);
-    if (age < duration) {
+    if (age < duration + grace) {
       kept.push(article);
     } else {
       expiredUrls.push(article.url);
@@ -440,7 +443,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
 
           const { kept: sorted, expiredUrls } = expireArticles(
             [...loadedArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
-            loadedFeeds
+            loadedFeeds,
+            loadedReadIds
           );
 
           if (expiredUrls.length > 0) {
@@ -546,14 +550,15 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const updatedFeeds = [...feeds, newFeed];
       const { kept: updatedArticles } = expireArticles(
         [...articles, ...newArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
-        updatedFeeds
+        updatedFeeds,
+        readIds
       );
 
       await saveFeeds(updatedFeeds);
       await saveArticles(updatedArticles);
       return { success: true };
     },
-    [feeds, articles, saveFeeds, saveArticles]
+    [feeds, articles, readIds, saveFeeds, saveArticles]
   );
 
   const addMultipleFeeds = useCallback(
@@ -609,13 +614,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const allFeeds = [...feeds, ...newFeeds];
       const { kept: sorted } = expireArticles(
         [...newArticles, ...articles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
-        allFeeds
+        allFeeds,
+        readIds
       );
       await saveFeeds(allFeeds);
       await saveArticles(sorted);
       return { success: successCount, failed: failedUrls.length, failedUrls };
     },
-    [feeds, articles, saveFeeds, saveArticles]
+    [feeds, articles, readIds, saveFeeds, saveArticles]
   );
 
   const removeFeed = useCallback(
@@ -677,7 +683,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           }));
         const { kept: sorted, expiredUrls } = expireArticles(
           [...newArticles, ...currentArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
-          feeds
+          feeds,
+          readIds
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         if (expiredUrls.length > 0) {
@@ -700,7 +707,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         return updated;
       });
     },
-    [feeds]
+    [feeds, readIds]
   );
 
   const refreshFeeds = useCallback(async () => {
@@ -739,7 +746,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         }
         const { kept: sorted, expiredUrls } = expireArticles(
           merged.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
-          feeds
+          feeds,
+          readIds
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         if (expiredUrls.length > 0) {
@@ -764,7 +772,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds]);
+  }, [feeds, readIds]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {

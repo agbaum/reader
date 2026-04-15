@@ -323,9 +323,25 @@ async function fetchFeedData(
   }
 }
 
-const READ_GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000; // 1 week after normal expiry
+// Articles the user has started or finished reading are kept for an extra week past their normal expiry.
+const READ_GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000;
 
-function expireArticles(articles: Article[], feeds: Feed[], readIds: Set<string>): { kept: Article[]; expiredUrls: string[] } {
+function buildProtectedIds(
+  readIds: Set<string>,
+  progressMap: Record<string, number>,
+  readerProgressMap: Record<string, number>
+): Set<string> {
+  const ids = new Set(readIds);
+  for (const [id, p] of Object.entries(progressMap)) {
+    if (p > 0) ids.add(id);
+  }
+  for (const [id, p] of Object.entries(readerProgressMap)) {
+    if (p > 0) ids.add(id);
+  }
+  return ids;
+}
+
+function expireArticles(articles: Article[], feeds: Feed[], protectedIds: Set<string>): { kept: Article[]; expiredUrls: string[] } {
   const feedMap = new Map(feeds.map((f) => [f.id, f]));
   const kept: Article[] = [];
   const expiredUrls: string[] = [];
@@ -336,7 +352,7 @@ function expireArticles(articles: Article[], feeds: Feed[], readIds: Set<string>
       continue;
     }
     const duration = EXPIRY_DURATIONS[feed.expiryBucket ?? "3d"];
-    const grace = readIds.has(article.id) ? READ_GRACE_PERIOD : 0;
+    const grace = protectedIds.has(article.id) ? READ_GRACE_PERIOD : 0;
     const age = Date.now() - (article.fetchedAt ?? article.publishedAt ?? 0);
     if (age < duration + grace) {
       kept.push(article);
@@ -444,7 +460,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           const { kept: sorted, expiredUrls } = expireArticles(
             [...loadedArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
             loadedFeeds,
-            loadedReadIds
+            buildProtectedIds(loadedReadIds, loadedProgress, loadedReaderProgress)
           );
 
           if (expiredUrls.length > 0) {
@@ -503,9 +519,17 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveReaderScrollProgress = useCallback((articleId: string, progress: number) => {
+    const now = Date.now();
     setReaderProgressMap((current) => {
       const updated = { ...current, [articleId]: progress };
       AsyncStorage.setItem(READER_PROGRESS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    setArticles((current) => {
+      const updated = current.map((a) =>
+        a.id === articleId ? { ...a, lastReadAt: now } : a
+      );
+      AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
       return updated;
     });
   }, []);
@@ -551,14 +575,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const { kept: updatedArticles } = expireArticles(
         [...articles, ...newArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
         updatedFeeds,
-        readIds
+        buildProtectedIds(readIds, progressMap, readerProgressMap)
       );
 
       await saveFeeds(updatedFeeds);
       await saveArticles(updatedArticles);
       return { success: true };
     },
-    [feeds, articles, readIds, saveFeeds, saveArticles]
+    [feeds, articles, readIds, progressMap, readerProgressMap, saveFeeds, saveArticles]
   );
 
   const addMultipleFeeds = useCallback(
@@ -615,13 +639,13 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const { kept: sorted } = expireArticles(
         [...newArticles, ...articles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
         allFeeds,
-        readIds
+        buildProtectedIds(readIds, progressMap, readerProgressMap)
       );
       await saveFeeds(allFeeds);
       await saveArticles(sorted);
       return { success: successCount, failed: failedUrls.length, failedUrls };
     },
-    [feeds, articles, readIds, saveFeeds, saveArticles]
+    [feeds, articles, readIds, progressMap, readerProgressMap, saveFeeds, saveArticles]
   );
 
   const removeFeed = useCallback(
@@ -684,7 +708,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         const { kept: sorted, expiredUrls } = expireArticles(
           [...newArticles, ...currentArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
           feeds,
-          readIds
+          buildProtectedIds(readIds, progressMap, readerProgressMap)
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         if (expiredUrls.length > 0) {
@@ -707,7 +731,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         return updated;
       });
     },
-    [feeds, readIds]
+    [feeds, readIds, progressMap, readerProgressMap]
   );
 
   const refreshFeeds = useCallback(async () => {
@@ -747,7 +771,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         const { kept: sorted, expiredUrls } = expireArticles(
           merged.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
           feeds,
-          readIds
+          buildProtectedIds(readIds, progressMap, readerProgressMap)
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
         if (expiredUrls.length > 0) {
@@ -772,7 +796,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [feeds, readIds]);
+  }, [feeds, readIds, progressMap, readerProgressMap]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -816,7 +840,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const dismissArticle = useCallback((articleId: string) => {
     setArticles((current) => {
       const article = current.find((a) => a.id === articleId);
-      const hasProgress = (progressMap[articleId] ?? 0) > 0;
+      const hasProgress = (progressMap[articleId] ?? 0) > 0 || (readerProgressMap[articleId] ?? 0) > 0;
       // Keep articles with scroll progress so they remain in Recently Read;
       // fully-unread dismissed articles can be removed entirely.
       const updated = hasProgress
@@ -829,7 +853,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       }
       return updated;
     });
-  }, [progressMap]);
+  }, [progressMap, readerProgressMap]);
 
   const resetArticleExpiry = useCallback(async (articleId: string) => {
     setArticles((current) => {

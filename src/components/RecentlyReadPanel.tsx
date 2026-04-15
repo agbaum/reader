@@ -34,7 +34,7 @@ function ReadArticleRow({ article }: { article: Article }) {
     openArticle(article);
   }, [article, openArticle]);
 
-  const progress = article.isRead ? 1 : (article.scrollProgress ?? 0);
+  const progress = article.isRead ? 1 : Math.max(article.scrollProgress ?? 0, article.readerScrollProgress ?? 0);
   const progressPct = `${Math.round(progress * 100)}%`;
 
   return (
@@ -69,7 +69,7 @@ export function RecentlyReadPanel({ visible, onClose }: RecentlyReadPanelProps) 
   const insets = useSafeAreaInsets();
 
   const readArticles = articles
-    .filter((a) => a.isRead || (a.scrollProgress ?? 0) > 0)
+    .filter((a) => a.isRead || Math.max(a.scrollProgress ?? 0, a.readerScrollProgress ?? 0) > 0)
     .sort((a, b) => (b.lastReadAt ?? b.publishedAt ?? 0) - (a.lastReadAt ?? a.publishedAt ?? 0));
 
   const renderItem = useCallback(

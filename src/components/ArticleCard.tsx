@@ -130,11 +130,14 @@ export function ArticleCard({
                 <View style={[styles.expiryFill, { flex: expiryPct, backgroundColor: EXPIRY_COLORS[article.expiryBucket] }]} />
               </View>
             )}
-            {!!article.scrollProgress && article.scrollProgress < 0.9 && (
-              <View style={styles.readingProgressTrack}>
-                <View style={[styles.readingProgressFill, { width: `${Math.round(article.scrollProgress * 100)}%` }]} />
-              </View>
-            )}
+            {(() => {
+              const p = Math.max(article.scrollProgress ?? 0, article.readerScrollProgress ?? 0);
+              return !!p && p < 0.9 ? (
+                <View style={styles.readingProgressTrack}>
+                  <View style={[styles.readingProgressFill, { width: `${Math.round(p * 100)}%` }]} />
+                </View>
+              ) : null;
+            })()}
             <View style={styles.content}>
               <View style={styles.meta}>
                 {showFeedName && (

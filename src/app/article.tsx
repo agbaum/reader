@@ -224,10 +224,10 @@ export default function ArticleScreen() {
 
   const readerProgressRef = useRef(savedReaderProgress);
   const liveProgressRef = useRef(savedLiveProgress);
-  const maxProgress = Math.max(savedReaderProgress, savedLiveProgress);
-  const progressAnim = useRef(new Animated.Value(maxProgress)).current;
+  const initialProgress = feedReaderMode ? savedReaderProgress : savedLiveProgress;
+  const progressAnim = useRef(new Animated.Value(initialProgress)).current;
   const containerTranslateY = useRef(new Animated.Value(0)).current;
-  const [progressWidth, setProgressWidth] = useState(maxProgress);
+  const [progressWidth, setProgressWidth] = useState(initialProgress);
   const hasMarkedRead = useRef(article?.isRead ?? false);
   const isOnOriginalPage = useRef(true);
   const isDismissing = useRef(false);
@@ -309,15 +309,15 @@ export default function ArticleScreen() {
           saveScrollProgress(id, p);
         }
 
-        const barProgress = Math.max(readerProgressRef.current, liveProgressRef.current);
         Animated.timing(progressAnim, {
-          toValue: barProgress,
+          toValue: p,
           duration: 100,
           useNativeDriver: false,
         }).start();
-        setProgressWidth(barProgress);
+        setProgressWidth(p);
 
-        if (!hasMarkedRead.current && barProgress >= 0.9) {
+        const maxProgress = Math.max(readerProgressRef.current, liveProgressRef.current);
+        if (!hasMarkedRead.current && maxProgress >= 0.9) {
           hasMarkedRead.current = true;
           markAsRead(id);
         }
@@ -343,8 +343,14 @@ export default function ArticleScreen() {
   const toggleMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     isOnOriginalPage.current = true;
-    setLiveMode((prev) => !prev);
-  }, []);
+    setLiveMode((prev) => {
+      const nextIsReaderMode = prev;
+      const nextProgress = nextIsReaderMode ? readerProgressRef.current : liveProgressRef.current;
+      progressAnim.setValue(nextProgress);
+      setProgressWidth(nextProgress);
+      return !prev;
+    });
+  }, [progressAnim]);
 
   if (!article) {
     return (

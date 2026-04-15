@@ -13,51 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { Article, useFeeds } from "@/context/FeedsContext";
-import { useOpenArticle } from "@/hooks/use-open-article";
-
-function timeAgo(ts?: number): string {
-  if (!ts) return "";
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return `${Math.floor(days / 7)}w`;
-}
-
-function ReadArticleRow({ article }: { article: Article }) {
-  const openArticle = useOpenArticle();
-  const handlePress = useCallback(() => {
-    openArticle(article);
-  }, [article, openArticle]);
-
-  const progress = article.isRead ? 1 : Math.max(article.scrollProgress ?? 0, article.readerScrollProgress ?? 0);
-  const progressPct = `${Math.round(progress * 100)}%`;
-
-  return (
-    <Pressable
-      onPress={handlePress}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}
-    >
-      <View style={styles.rowContent}>
-        <Text style={styles.feedName} numberOfLines={1}>
-          {article.feedTitle}
-        </Text>
-        <Text style={styles.title} numberOfLines={2}>
-          {article.title}
-        </Text>
-        <Text style={styles.meta}>{timeAgo(article.publishedAt)}</Text>
-      </View>
-      <Feather name="chevron-right" size={16} color={Colors.light.textTertiary} />
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: progressPct }]} />
-      </View>
-    </Pressable>
-  );
-}
+import { ArticleCard } from "@/components/ArticleCard";
 
 interface RecentlyReadPanelProps {
   visible: boolean;
@@ -73,7 +29,9 @@ export function RecentlyReadPanel({ visible, onClose }: RecentlyReadPanelProps) 
     .sort((a, b) => (b.lastReadAt ?? b.publishedAt ?? 0) - (a.lastReadAt ?? a.publishedAt ?? 0));
 
   const renderItem = useCallback(
-    ({ item }: { item: Article }) => <ReadArticleRow article={item} />,
+    ({ item }: { item: Article }) => (
+      <ArticleCard article={item} showExpiryBar={false} />
+    ),
     []
   );
 
@@ -125,7 +83,6 @@ export function RecentlyReadPanel({ visible, onClose }: RecentlyReadPanelProps) 
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={ListEmpty}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={[
             styles.list,
             { paddingBottom: insets.bottom + 32 },
@@ -178,53 +135,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
     marginTop: 1,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    gap: 12,
-    overflow: "hidden",
-  },
-  rowContent: {
-    flex: 1,
-    gap: 3,
-  },
-  feedName: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: Colors.light.accent,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  title: {
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-    color: Colors.light.textSecondary,
-    lineHeight: 21,
-  },
-  meta: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: Colors.light.textTertiary,
-  },
-  progressTrack: {
-    position: "absolute",
-    bottom: 0,
-    left: 20,
-    right: 0,
-    height: 2,
-    backgroundColor: Colors.light.separator,
-  },
-  progressFill: {
-    height: 2,
-    backgroundColor: Colors.light.accent,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: Colors.light.separator,
-    marginLeft: 20,
   },
   empty: {
     flex: 1,

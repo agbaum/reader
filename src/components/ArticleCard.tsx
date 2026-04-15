@@ -30,6 +30,7 @@ interface ArticleCardProps {
   onResetExpiry?: (id: string) => void;
   onDismiss?: (id: string) => void;
   showFeedName?: boolean;
+  showExpiryBar?: boolean;
 }
 
 function timeAgo(ts?: number): string {
@@ -51,6 +52,7 @@ export function ArticleCard({
   onResetExpiry,
   onDismiss,
   showFeedName = true,
+  showExpiryBar = true,
 }: ArticleCardProps) {
   const translateX = useSharedValue(0);
   const openArticle = useOpenArticle();
@@ -80,6 +82,7 @@ export function ArticleCard({
   const gesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-15, 15])
+    .enabled(!!onDismiss)
     .onUpdate((e) => {
       translateX.value = e.translationX;
     })
@@ -124,7 +127,7 @@ export function ArticleCard({
             onLongPress={handleLongPress}
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           >
-            {article.expiryBucket && (
+            {showExpiryBar && article.expiryBucket && (
               <View style={[styles.expiryTrack, { backgroundColor: EXPIRY_COLORS[article.expiryBucket] + "30" }]}>
                 <View style={{ flex: 1 - expiryPct }} />
                 <View style={[styles.expiryFill, { flex: expiryPct, backgroundColor: EXPIRY_COLORS[article.expiryBucket] }]} />

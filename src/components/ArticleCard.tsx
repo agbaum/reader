@@ -1,13 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
@@ -31,6 +32,9 @@ interface ArticleCardProps {
   onDismiss?: (id: string) => void;
   showFeedName?: boolean;
   showExpiryBar?: boolean;
+  highlighted?: boolean;
+  fading?: boolean;
+  onFadeComplete?: () => void;
 }
 
 function timeAgo(ts?: number): string {
@@ -53,9 +57,36 @@ export function ArticleCard({
   onDismiss,
   showFeedName = true,
   showExpiryBar = true,
+  highlighted = false,
+  fading = false,
+  onFadeComplete,
 }: ArticleCardProps) {
   const translateX = useSharedValue(0);
+  const highlightAnim = useSharedValue(0);
+  const fadeAnim = useSharedValue(1);
   const openArticle = useOpenArticle();
+
+  // Keep a stable ref to onFadeComplete so the Reanimated callback always calls the latest version
+  const onFadeCompleteRef = useRef(onFadeComplete);
+  useEffect(() => { onFadeCompleteRef.current = onFadeComplete; });
+  const callFadeComplete = useCallback(() => { onFadeCompleteRef.current?.(); }, []);
+
+  useEffect(() => {
+    if (highlighted) {
+      highlightAnim.value = withSequence(
+        withTiming(1, { duration: 120 }),
+        withTiming(0, { duration: 1800 })
+      );
+    }
+  }, [highlighted]);
+
+  useEffect(() => {
+    if (fading) {
+      fadeAnim.value = withTiming(0, { duration: 450 }, (finished) => {
+        if (finished) runOnJS(callFadeComplete)();
+      });
+    }
+  }, [fading]);
 
   const expiryPct = useMemo(() => {
     if (!article.fetchedAt || !article.expiryBucket) return 1;
@@ -101,6 +132,14 @@ export function ArticleCard({
     transform: [{ translateX: translateX.value }],
   }));
 
+  const highlightOverlayStyle = useAnimatedStyle(() => ({
+    opacity: highlightAnim.value,
+  }));
+
+  const containerFadeStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+  }));
+
   const bgOpacityStyle = useAnimatedStyle(() => ({
     opacity: Math.min(Math.abs(translateX.value) / DISMISS_THRESHOLD, 1),
   }));
@@ -112,7 +151,7 @@ export function ArticleCard({
   }));
 
   return (
-    <View style={styles.rowContainer}>
+    <Animated.View style={[styles.rowContainer, containerFadeStyle]}>
       <Animated.View style={[styles.dismissBg, bgOpacityStyle]}>
         <Animated.View style={[styles.dismissContent, dismissIconStyle]}>
           <Feather name="archive" size={18} color={Colors.light.accent} />
@@ -182,10 +221,14 @@ export function ArticleCard({
               )}
             </View>
 
+            <Animated.View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFillObject, styles.highlightOverlay, highlightOverlayStyle]}
+            />
           </Pressable>
         </Animated.View>
       </GestureDetector>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -236,6 +279,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   expiryFill: {},
+  highlightOverlay: {
+    backgroundColor: Colors.light.accent + "26", // ~15% opacity at full anim value
+    borderRadius: 14,
+  },
   readingProgressTrack: {
     position: "absolute",
     bottom: 0,

@@ -19,6 +19,7 @@ import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
+import { setLastOpenedArticle } from "@/lib/last-opened-article";
 
 function escapeHtml(str: string): string {
   return str
@@ -266,6 +267,7 @@ export default function ArticleScreen() {
   const dismissUp = useCallback(() => {
     if (isDismissing.current) return;
     isDismissing.current = true;
+    if (id) setLastOpenedArticle(id, hasMarkedRead.current);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.timing(containerTranslateY, {
       toValue: -screenHeight,
@@ -336,9 +338,10 @@ export default function ArticleScreen() {
   }, [article?.url]);
 
   const handleBack = useCallback(() => {
+    if (id) setLastOpenedArticle(id, hasMarkedRead.current);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.back();
-  }, [router]);
+  }, [router, id]);
 
   const toggleMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

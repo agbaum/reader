@@ -1,16 +1,19 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
+  LayoutAnimation,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  UIManager,
   View,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -20,6 +23,11 @@ import { RecentlyReadPanel } from "@/components/RecentlyReadPanel";
 import { Sidebar } from "@/components/Sidebar";
 import Colors from "@/constants/colors";
 import { Article, useFeeds } from "@/context/FeedsContext";
+import { consumeLastOpenedArticle } from "@/lib/last-opened-article";
+
+if (Platform.OS === "android") {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
 
 function PulsingDot({ visible }: { visible: boolean }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -52,17 +60,70 @@ export default function TodayScreen() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [feedsPanelOpen, setFeedsPanelOpen] = useState(false);
   const [recentlyReadOpen, setRecentlyReadOpen] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [lingeringIds, setLingeringIds] = useState<Set<string>>(new Set());
+  const [fadingIds, setFadingIds] = useState<Set<string>>(new Set());
+  const lingerTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const unreadArticles = useMemo(
-    () => articles.filter((a) => !a.isRead && !a.dismissed),
-    [articles]
+  const displayedArticles = useMemo(
+    () => articles.filter((a) => (!a.isRead && !a.dismissed) || lingeringIds.has(a.id)),
+    [articles, lingeringIds]
+  );
+
+  const removeLingering = useCallback((id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setLingeringIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setFadingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const info = consumeLastOpenedArticle();
+      if (!info) return;
+
+      setHighlightedId(info.id);
+      const highlightTimer = setTimeout(() => setHighlightedId(null), 2500);
+
+      if (info.wasRead) {
+        setLingeringIds((prev) => new Set([...prev, info.id]));
+        const lingerTimer = setTimeout(() => {
+          setFadingIds((prev) => new Set([...prev, info.id]));
+        }, 1500);
+        lingerTimersRef.current.set(info.id, lingerTimer);
+      }
+
+      return () => {
+        clearTimeout(highlightTimer);
+        const lt = lingerTimersRef.current.get(info.id);
+        if (lt) {
+          clearTimeout(lt);
+          lingerTimersRef.current.delete(info.id);
+        }
+      };
+    }, [])
   );
 
   const renderItem = useCallback(
     ({ item }: { item: Article }) => (
-      <ArticleCard article={item} onResetExpiry={resetArticleExpiry} onDismiss={dismissArticle} showFeedName />
+      <ArticleCard
+        article={item}
+        onResetExpiry={resetArticleExpiry}
+        onDismiss={dismissArticle}
+        showFeedName
+        highlighted={item.id === highlightedId}
+        fading={fadingIds.has(item.id)}
+        onFadeComplete={() => removeLingering(item.id)}
+      />
     ),
-    []
+    [resetArticleExpiry, dismissArticle, highlightedId, fadingIds, removeLingering]
   );
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
@@ -125,7 +186,7 @@ export default function TodayScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={unreadArticles}
+        data={displayedArticles}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListEmptyComponent={ListEmpty}

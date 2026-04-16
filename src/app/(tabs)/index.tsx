@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ArticleCard } from "@/components/ArticleCard";
+import { ArticleDebugSheet } from "@/components/ArticleDebugSheet";
 import { FeedsPanel } from "@/components/FeedsPanel";
 import { RecentlyReadPanel } from "@/components/RecentlyReadPanel";
 import { Sidebar } from "@/components/Sidebar";
@@ -61,6 +62,7 @@ export default function TodayScreen() {
   const [feedsPanelOpen, setFeedsPanelOpen] = useState(false);
   const [recentlyReadOpen, setRecentlyReadOpen] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [debugArticle, setDebugArticle] = useState<Article | null>(null);
   const [lingeringIds, setLingeringIds] = useState<Set<string>>(new Set());
   const [fadingIds, setFadingIds] = useState<Set<string>>(new Set());
   const lingerTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -111,19 +113,28 @@ export default function TodayScreen() {
     }, [])
   );
 
+  const handleDebugArticle = useCallback(
+    (id: string) => {
+      const article = articles.find((a) => a.id === id) ?? null;
+      setDebugArticle(article);
+    },
+    [articles]
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: Article }) => (
       <ArticleCard
         article={item}
         onResetExpiry={resetArticleExpiry}
         onDismiss={dismissArticle}
+        onLongPress={handleDebugArticle}
         showFeedName
         highlighted={item.id === highlightedId}
         fading={fadingIds.has(item.id)}
         onFadeComplete={() => removeLingering(item.id)}
       />
     ),
-    [resetArticleExpiry, dismissArticle, highlightedId, fadingIds, removeLingering]
+    [resetArticleExpiry, dismissArticle, handleDebugArticle, highlightedId, fadingIds, removeLingering]
   );
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
@@ -235,6 +246,11 @@ export default function TodayScreen() {
       <RecentlyReadPanel
         visible={recentlyReadOpen}
         onClose={() => setRecentlyReadOpen(false)}
+      />
+
+      <ArticleDebugSheet
+        article={debugArticle}
+        onClose={() => setDebugArticle(null)}
       />
     </View>
   );

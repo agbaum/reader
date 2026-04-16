@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  interpolateColor,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -24,12 +25,17 @@ const EXPIRY_COLORS: Record<ExpiryBucket, string> = {
   "7d":  "#74A87E", // soft green
 };
 
-const DISMISS_THRESHOLD = 80;
+const RESET_THRESHOLD = 50;
+const DISMISS_THRESHOLD = 110;
+const RESET_BG = "#C8EDD5";
+const DISMISS_BG = "#EDD5C8";
+const RESET_FG = "#2E7D4F";
 
 interface ArticleCardProps {
   article: Article;
   onResetExpiry?: (id: string) => void;
   onDismiss?: (id: string) => void;
+  onLongPress?: (id: string) => void;
   showFeedName?: boolean;
   showExpiryBar?: boolean;
   highlighted?: boolean;
@@ -55,6 +61,7 @@ export function ArticleCard({
   article,
   onResetExpiry,
   onDismiss,
+  onLongPress,
   showFeedName = true,
   showExpiryBar = true,
   highlighted = false,
@@ -95,34 +102,70 @@ export function ArticleCard({
     return Math.max(0, Math.min(1, 1 - elapsed / duration));
   }, [article.fetchedAt, article.expiryBucket]);
 
+  const hasCrossedReset = useSharedValue(false);
+  const hasCrossedDismiss = useSharedValue(false);
+
   const handlePress = useCallback(() => {
     openArticle(article);
   }, [article, openArticle]);
 
   const handleLongPress = useCallback(() => {
-    if (!onResetExpiry) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onResetExpiry(article.id);
-  }, [article.id, onResetExpiry]);
+    if (!onLongPress) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onLongPress(article.id);
+  }, [article.id, onLongPress]);
+
+  const hapticLight = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+  const hapticMedium = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
 
   const triggerDismiss = useCallback((id: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onDismiss?.(id);
   }, [onDismiss]);
 
+  const triggerResetExpiry = useCallback((id: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onResetExpiry?.(id);
+  }, [onResetExpiry]);
+
   const gesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-15, 15])
     .enabled(!!onDismiss)
+    .onBegin(() => {
+      hasCrossedReset.value = false;
+      hasCrossedDismiss.value = false;
+    })
     .onUpdate((e) => {
       translateX.value = e.translationX;
+      const abs = Math.abs(e.translationX);
+      if (abs > RESET_THRESHOLD && !hasCrossedReset.value) {
+        hasCrossedReset.value = true;
+        runOnJS(hapticLight)();
+      } else if (abs <= RESET_THRESHOLD && hasCrossedReset.value) {
+        hasCrossedReset.value = false;
+      }
+      if (abs > DISMISS_THRESHOLD && !hasCrossedDismiss.value) {
+        hasCrossedDismiss.value = true;
+        runOnJS(hapticMedium)();
+      } else if (abs <= DISMISS_THRESHOLD && hasCrossedDismiss.value) {
+        hasCrossedDismiss.value = false;
+      }
     })
     .onEnd((e) => {
-      if (Math.abs(e.translationX) > DISMISS_THRESHOLD) {
+      const abs = Math.abs(e.translationX);
+      if (abs > DISMISS_THRESHOLD) {
         const direction = e.translationX > 0 ? 1 : -1;
         translateX.value = withTiming(direction * 600, { duration: 220 }, () => {
           runOnJS(triggerDismiss)(article.id);
         });
+      } else if (abs > RESET_THRESHOLD) {
+        translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+        runOnJS(triggerResetExpiry)(article.id);
       } else {
         translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       }
@@ -140,22 +183,43 @@ export function ArticleCard({
     opacity: fadeAnim.value,
   }));
 
-  const bgOpacityStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(Math.abs(translateX.value) / DISMISS_THRESHOLD, 1),
-  }));
+  const bgStyle = useAnimatedStyle(() => {
+    const abs = Math.abs(translateX.value);
+    const t = Math.min(Math.max((abs - RESET_THRESHOLD) / (DISMISS_THRESHOLD - RESET_THRESHOLD), 0), 1);
+    return {
+      backgroundColor: interpolateColor(t, [0, 1], [RESET_BG, DISMISS_BG]),
+      opacity: Math.min(abs / RESET_THRESHOLD, 1),
+    };
+  });
 
-  const dismissIconStyle = useAnimatedStyle(() => ({
+  const actionPositionStyle = useAnimatedStyle(() => ({
     left: translateX.value >= 0 ? 20 : undefined,
     right: translateX.value < 0 ? 20 : undefined,
     flexDirection: translateX.value >= 0 ? "row" : "row-reverse",
   }));
 
+  const resetActionStyle = useAnimatedStyle(() => {
+    const abs = Math.abs(translateX.value);
+    const t = Math.min(Math.max((abs - RESET_THRESHOLD) / (DISMISS_THRESHOLD - RESET_THRESHOLD), 0), 1);
+    return { opacity: 1 - t };
+  });
+
+  const dismissActionStyle = useAnimatedStyle(() => {
+    const abs = Math.abs(translateX.value);
+    const t = Math.min(Math.max((abs - RESET_THRESHOLD) / (DISMISS_THRESHOLD - RESET_THRESHOLD), 0), 1);
+    return { opacity: t };
+  });
+
   return (
     <Animated.View style={[styles.rowContainer, containerFadeStyle]}>
-      <Animated.View style={[styles.dismissBg, bgOpacityStyle]}>
-        <Animated.View style={[styles.dismissContent, dismissIconStyle]}>
+      <Animated.View style={[styles.dismissBg, bgStyle]}>
+        <Animated.View style={[styles.actionContent, actionPositionStyle, resetActionStyle]}>
+          <Feather name="rotate-ccw" size={18} color={RESET_FG} />
+          <Text style={[styles.actionLabel, { color: RESET_FG }]}>Reset</Text>
+        </Animated.View>
+        <Animated.View style={[styles.actionContent, actionPositionStyle, dismissActionStyle]}>
           <Feather name="archive" size={18} color={Colors.light.accent} />
-          <Text style={styles.dismissLabel}>Dismiss</Text>
+          <Text style={[styles.actionLabel, { color: Colors.light.accent }]}>Dismiss</Text>
         </Animated.View>
       </Animated.View>
 
@@ -163,7 +227,7 @@ export function ArticleCard({
         <Animated.View style={cardAnimStyle}>
           <Pressable
             onPress={handlePress}
-            onLongPress={handleLongPress}
+            onLongPress={onLongPress ? handleLongPress : undefined}
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           >
             {showExpiryBar && article.expiryBucket && (
@@ -237,21 +301,18 @@ const styles = StyleSheet.create({
   },
   dismissBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#EDD5C8",
     borderRadius: 14,
   },
-  dismissContent: {
+  actionContent: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  dismissLabel: {
+  actionLabel: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.light.accent,
   },
   card: {
     backgroundColor: Colors.light.surface,

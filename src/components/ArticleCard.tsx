@@ -175,9 +175,7 @@ export function ArticleCard({
             {(() => {
               const p = Math.max(article.scrollProgress ?? 0, article.readerScrollProgress ?? 0);
               return !!p && p < 0.9 ? (
-                <View style={styles.readingProgressTrack}>
-                  <View style={[styles.readingProgressFill, { width: `${Math.round(p * 100)}%` }]} />
-                </View>
+                <Text style={styles.readingProgress}>{Math.round(p * 100)}%</Text>
               ) : null;
             })()}
             <View style={styles.content}>
@@ -283,21 +281,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.accent + "26", // ~15% opacity at full anim value
     borderRadius: 14,
   },
-  readingProgressTrack: {
+  readingProgress: {
     position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: Colors.light.border,
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-    overflow: "hidden",
-  },
-  readingProgressFill: {
-    height: 2,
-    backgroundColor: Colors.light.accent,
-    opacity: 0.6,
+    bottom: 12,
+    right: 14,
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.light.accent,
+    opacity: 0.7,
   },
   content: {
     flex: 1,

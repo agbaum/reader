@@ -235,6 +235,14 @@ export default function ArticleScreen() {
 
   const isReaderMode = !liveMode;
 
+  // Ensure highlight fires on the article card regardless of how we exit
+  // (X button and overscroll also call this, but a double-write is harmless)
+  useEffect(() => {
+    return () => {
+      if (id) setLastOpenedArticle(id, hasMarkedRead.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (!article) return;
     let cancelled = false;

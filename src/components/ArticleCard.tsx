@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolateColor,
@@ -71,12 +71,21 @@ export function ArticleCard({
   const translateX = useSharedValue(0);
   const highlightAnim = useSharedValue(0);
   const fadeAnim = useSharedValue(1);
+  const measuredHeight = useSharedValue(0);
+  const heightAnim = useSharedValue(-1); // -1 = unconstrained (not collapsing)
   const openArticle = useOpenArticle();
 
   // Keep a stable ref to onFadeComplete so the Reanimated callback always calls the latest version
   const onFadeCompleteRef = useRef(onFadeComplete);
   useEffect(() => { onFadeCompleteRef.current = onFadeComplete; });
   const callFadeComplete = useCallback(() => { onFadeCompleteRef.current?.(); }, []);
+
+  const handleLayout = useCallback((e: LayoutChangeEvent) => {
+    // Don't update once collapse has started
+    if (heightAnim.value < 0) {
+      measuredHeight.value = e.nativeEvent.layout.height;
+    }
+  }, []);
 
   useEffect(() => {
     if (highlighted) {
@@ -89,7 +98,9 @@ export function ArticleCard({
 
   useEffect(() => {
     if (fading) {
-      fadeAnim.value = withTiming(0, { duration: 450 }, (finished) => {
+      heightAnim.value = measuredHeight.value;
+      fadeAnim.value = withTiming(0, { duration: 380 });
+      heightAnim.value = withTiming(0, { duration: 380 }, (finished) => {
         if (finished) runOnJS(callFadeComplete)();
       });
     }
@@ -171,6 +182,11 @@ export function ArticleCard({
       }
     });
 
+  const collapseStyle = useAnimatedStyle(() => {
+    if (heightAnim.value < 0) return {};
+    return { height: heightAnim.value, overflow: "hidden" };
+  });
+
   const cardAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
@@ -211,6 +227,7 @@ export function ArticleCard({
   });
 
   return (
+    <Animated.View style={collapseStyle} onLayout={handleLayout}>
     <Animated.View style={[styles.rowContainer, containerFadeStyle]}>
       <Animated.View style={[styles.dismissBg, bgStyle]}>
         <Animated.View style={[styles.actionContent, actionPositionStyle, resetActionStyle]}>
@@ -290,6 +307,7 @@ export function ArticleCard({
           </Pressable>
         </Animated.View>
       </GestureDetector>
+    </Animated.View>
     </Animated.View>
   );
 }

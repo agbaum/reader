@@ -5,14 +5,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   FlatList,
-  LayoutAnimation,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  UIManager,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,9 +24,6 @@ import Colors from "@/constants/colors";
 import { Article, useFeeds } from "@/context/FeedsContext";
 import { consumeLastOpenedArticle } from "@/lib/last-opened-article";
 
-if (Platform.OS === "android") {
-  UIManager.setLayoutAnimationEnabledExperimental?.(true);
-}
 
 function PulsingDot({ visible }: { visible: boolean }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -73,7 +68,6 @@ export default function TodayScreen() {
   );
 
   const removeLingering = useCallback((id: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setLingeringIds((prev) => {
       const next = new Set(prev);
       next.delete(id);

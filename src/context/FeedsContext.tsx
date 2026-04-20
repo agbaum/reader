@@ -373,6 +373,16 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const initialLoadDone = useRef(false);
 
+  // Always-current refs used by the expiry interval (avoids stale closures)
+  const feedsRef = useRef(feeds);
+  feedsRef.current = feeds;
+  const readIdsRef = useRef(readIds);
+  readIdsRef.current = readIds;
+  const progressMapRef = useRef(progressMap);
+  progressMapRef.current = progressMap;
+  const readerProgressMapRef = useRef(readerProgressMap);
+  readerProgressMapRef.current = readerProgressMap;
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -485,6 +495,28 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       }
     };
     load();
+  }, []);
+
+  // Prune expired articles every minute while the app is in the foreground
+  useEffect(() => {
+    const id = setInterval(() => {
+      setArticles((currentArticles) => {
+        const { kept, expiredUrls } = expireArticles(
+          currentArticles,
+          feedsRef.current,
+          buildProtectedIds(readIdsRef.current, progressMapRef.current, readerProgressMapRef.current)
+        );
+        if (expiredUrls.length === 0) return currentArticles;
+        const ts = Date.now();
+        for (const url of expiredUrls) {
+          if (url) dismissedUrlsRef.current.set(url, ts);
+        }
+        AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
+        AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(kept));
+        return kept;
+      });
+    }, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   const saveFeeds = useCallback(async (f: Feed[]) => {

@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -106,12 +106,18 @@ export function ArticleCard({
     }
   }, [fading]);
 
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   const expiryPct = useMemo(() => {
     if (!article.fetchedAt || !article.expiryBucket) return 1;
     const duration = EXPIRY_DURATIONS[article.expiryBucket];
-    const elapsed = Date.now() - article.fetchedAt;
+    const elapsed = now - article.fetchedAt;
     return Math.max(0, Math.min(1, 1 - elapsed / duration));
-  }, [article.fetchedAt, article.expiryBucket]);
+  }, [article.fetchedAt, article.expiryBucket, now]);
 
   const hasCrossedReset = useSharedValue(false);
   const hasCrossedDismiss = useSharedValue(false);

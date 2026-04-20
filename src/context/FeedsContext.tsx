@@ -870,12 +870,15 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           readerProgressMap
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
-        if (expired.length > 0) {
-          const ts = Date.now();
-          for (const { url, feedId } of expired) {
-            if (url) dismissedUrlsRef.current.set(url, { feedId, ts });
-          }
-          AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
+        const ts = Date.now();
+        for (const { url, feedId } of expired) {
+          if (url) dismissedUrlsRef.current.set(url, { feedId, ts });
+        }
+        const activeFeedIds = new Set(feeds.map((f) => f.id));
+        const pruned = pruneDismissedUrls(dismissedUrlsRef.current, activeFeedIds);
+        if (pruned.size !== dismissedUrlsRef.current.size || expired.length > 0) {
+          dismissedUrlsRef.current = pruned;
+          AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...pruned.entries()]));
         }
         return sorted;
       });

@@ -399,7 +399,7 @@ App becomes active (AppState or launch)
     → All feeds fetched in parallel
     → New articles merged
     → Expired articles pruned
-    → Dismissed URL cache cleaned (> 7 days)
+    → Dismissed URL cache cleaned (> 14 days for deleted-feed entries)
   → Every 60s: expiry check timer fires
 ```
 

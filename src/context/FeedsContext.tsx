@@ -86,8 +86,37 @@ const ARTICLES_KEY = "rss_articles_v2";
 const READ_KEY = "rss_read_ids_v2";
 const PROGRESS_KEY = "rss_progress_v2";
 const READER_PROGRESS_KEY = "rss_reader_progress_v2";
-const DISMISSED_URLS_KEY = "rss_dismissed_urls_v2";
-const MAX_DISMISSED_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days — matches the longest expiry bucket
+const DISMISSED_URLS_KEY = "rss_dismissed_urls_v3";
+// Time-based cutoff for entries from deleted feeds (active feeds use per-feed minimum instead)
+const MAX_DISMISSED_AGE = 14 * 24 * 60 * 60 * 1000;
+const MAX_DISMISSED_PER_FEED = 50; // matches article cap per feed
+
+type DismissedEntry = { feedId: string; ts: number };
+
+function pruneDismissedUrls(
+  map: Map<string, DismissedEntry>,
+  activeFeedIds: Set<string>
+): Map<string, DismissedEntry> {
+  const now = Date.now();
+  const byFeed = new Map<string, Array<[string, DismissedEntry]>>();
+  for (const [url, entry] of map) {
+    const list = byFeed.get(entry.feedId) ?? [];
+    list.push([url, entry]);
+    byFeed.set(entry.feedId, list);
+  }
+  const result = new Map<string, DismissedEntry>();
+  for (const [feedId, entries] of byFeed) {
+    entries.sort((a, b) => b[1].ts - a[1].ts);
+    const isActive = activeFeedIds.has(feedId);
+    for (let i = 0; i < entries.length; i++) {
+      const [url, entry] = entries[i];
+      if ((isActive && i < MAX_DISMISSED_PER_FEED) || now - entry.ts < MAX_DISMISSED_AGE) {
+        result.set(url, entry);
+      }
+    }
+  }
+  return result;
+}
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -323,44 +352,57 @@ async function fetchFeedData(
   }
 }
 
-// Articles the user has started or finished reading are kept for an extra week past their normal expiry.
-const READ_GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000;
+// Read/in-progress articles are kept in the dismissed state for this long after their normal expiry,
+// so they continue to appear in the Recently Read panel.
+const RECENTLY_READ_GRACE_PERIOD = 7 * 24 * 60 * 60 * 1000;
 
-function buildProtectedIds(
+function expireArticles(
+  articles: Article[],
+  feeds: Feed[],
   readIds: Set<string>,
   progressMap: Record<string, number>,
   readerProgressMap: Record<string, number>
-): Set<string> {
-  const ids = new Set(readIds);
-  for (const [id, p] of Object.entries(progressMap)) {
-    if (p > 0) ids.add(id);
-  }
-  for (const [id, p] of Object.entries(readerProgressMap)) {
-    if (p > 0) ids.add(id);
-  }
-  return ids;
-}
-
-function expireArticles(articles: Article[], feeds: Feed[], protectedIds: Set<string>): { kept: Article[]; expiredUrls: string[] } {
+): { kept: Article[]; expired: Array<{ url: string; feedId: string }>; mutated: boolean } {
   const feedMap = new Map(feeds.map((f) => [f.id, f]));
   const kept: Article[] = [];
-  const expiredUrls: string[] = [];
+  const expired: Array<{ url: string; feedId: string }> = [];
+  let mutated = false;
+  const now = Date.now();
   for (const article of articles) {
     const feed = feedMap.get(article.feedId);
     if (!feed) {
-      expiredUrls.push(article.url);
+      if (article.url) expired.push({ url: article.url, feedId: article.feedId });
+      mutated = true;
       continue;
     }
     const duration = EXPIRY_DURATIONS[feed.expiryBucket ?? "3d"];
-    const grace = protectedIds.has(article.id) ? READ_GRACE_PERIOD : 0;
-    const age = Date.now() - (article.fetchedAt ?? article.publishedAt ?? 0);
-    if (age < duration + grace) {
+    const age = now - (article.fetchedAt ?? article.publishedAt ?? 0);
+    if (age < duration) {
       kept.push(article);
+    } else if (article.dismissed) {
+      // Already dismissed (by user or a prior expiry run) — keep through grace period then fully remove
+      if (age < duration + RECENTLY_READ_GRACE_PERIOD) {
+        kept.push(article);
+      } else {
+        if (article.url) expired.push({ url: article.url, feedId: article.feedId });
+        mutated = true;
+      }
     } else {
-      expiredUrls.push(article.url);
+      const wasEngaged =
+        readIds.has(article.id) ||
+        (progressMap[article.id] ?? 0) > 0 ||
+        (readerProgressMap[article.id] ?? 0) > 0;
+      if (wasEngaged) {
+        // Expire from Today but keep for Recently Read; URL cached only on full removal
+        kept.push({ ...article, dismissed: true });
+        mutated = true;
+      } else {
+        if (article.url) expired.push({ url: article.url, feedId: article.feedId });
+        mutated = true;
+      }
     }
   }
-  return { kept, expiredUrls };
+  return { kept, expired, mutated };
 }
 
 export function FeedsProvider({ children }: { children: ReactNode }) {
@@ -369,7 +411,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [progressMap, setProgressMap] = useState<Record<string, number>>({});
   const [readerProgressMap, setReaderProgressMap] = useState<Record<string, number>>({});
-  const dismissedUrlsRef = useRef<Map<string, number>>(new Map());
+  const dismissedUrlsRef = useRef<Map<string, DismissedEntry>>(new Map());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const initialLoadDone = useRef(false);
 
@@ -407,14 +449,12 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           ? JSON.parse(readerProgressStr)
           : {};
 
-        // Load and prune dismissed URLs older than the max expiry window
-        const now = Date.now();
-        const rawDismissed: [string, number][] = dismissedStr ? JSON.parse(dismissedStr) : [];
-        dismissedUrlsRef.current = new Map(
-          rawDismissed.filter(([, ts]) => now - ts < MAX_DISMISSED_AGE)
-        );
-        if (dismissedUrlsRef.current.size !== rawDismissed.length) {
-          await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
+        const rawDismissed: [string, DismissedEntry][] = dismissedStr ? JSON.parse(dismissedStr) : [];
+        const loadedActiveFeedIds = new Set(loadedFeeds.map((f) => f.id));
+        const prunedDismissed = pruneDismissedUrls(new Map(rawDismissed), loadedActiveFeedIds);
+        dismissedUrlsRef.current = prunedDismissed;
+        if (prunedDismissed.size !== rawDismissed.length) {
+          await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...prunedDismissed.entries()]));
         }
 
         setFeeds(loadedFeeds);
@@ -467,16 +507,18 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             })
           );
 
-          const { kept: sorted, expiredUrls } = expireArticles(
+          const { kept: sorted, expired } = expireArticles(
             [...loadedArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
             loadedFeeds,
-            buildProtectedIds(loadedReadIds, loadedProgress, loadedReaderProgress)
+            loadedReadIds,
+            loadedProgress,
+            loadedReaderProgress
           );
 
-          if (expiredUrls.length > 0) {
+          if (expired.length > 0) {
             const ts = Date.now();
-            for (const url of expiredUrls) {
-              if (url) dismissedUrlsRef.current.set(url, ts);
+            for (const { url, feedId } of expired) {
+              if (url) dismissedUrlsRef.current.set(url, { feedId, ts });
             }
             await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
           }
@@ -501,17 +543,21 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const id = setInterval(() => {
       setArticles((currentArticles) => {
-        const { kept, expiredUrls } = expireArticles(
+        const { kept, expired, mutated } = expireArticles(
           currentArticles,
           feedsRef.current,
-          buildProtectedIds(readIdsRef.current, progressMapRef.current, readerProgressMapRef.current)
+          readIdsRef.current,
+          progressMapRef.current,
+          readerProgressMapRef.current
         );
-        if (expiredUrls.length === 0) return currentArticles;
-        const ts = Date.now();
-        for (const url of expiredUrls) {
-          if (url) dismissedUrlsRef.current.set(url, ts);
+        if (!mutated) return currentArticles;
+        if (expired.length > 0) {
+          const ts = Date.now();
+          for (const { url, feedId } of expired) {
+            if (url) dismissedUrlsRef.current.set(url, { feedId, ts });
+          }
+          AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
         }
-        AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(kept));
         return kept;
       });
@@ -566,7 +612,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const saveDismissedUrls = useCallback(async (m: Map<string, number>) => {
+  const saveDismissedUrls = useCallback(async (m: Map<string, DismissedEntry>) => {
     dismissedUrlsRef.current = m;
     await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...m.entries()]));
   }, []);
@@ -607,7 +653,9 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const { kept: updatedArticles } = expireArticles(
         [...articles, ...newArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
         updatedFeeds,
-        buildProtectedIds(readIds, progressMap, readerProgressMap)
+        readIds,
+        progressMap,
+        readerProgressMap
       );
 
       await saveFeeds(updatedFeeds);
@@ -671,7 +719,9 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const { kept: sorted } = expireArticles(
         [...newArticles, ...articles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
         allFeeds,
-        buildProtectedIds(readIds, progressMap, readerProgressMap)
+        readIds,
+        progressMap,
+        readerProgressMap
       );
       await saveFeeds(allFeeds);
       await saveArticles(sorted);
@@ -686,6 +736,16 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       const updatedArticles = articles.filter((a) => a.feedId !== id);
       await saveFeeds(updatedFeeds);
       await saveArticles(updatedArticles);
+      let changed = false;
+      for (const [url, entry] of dismissedUrlsRef.current) {
+        if (entry.feedId === id) {
+          dismissedUrlsRef.current.delete(url);
+          changed = true;
+        }
+      }
+      if (changed) {
+        await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
+      }
     },
     [feeds, articles, saveFeeds, saveArticles]
   );
@@ -737,16 +797,18 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             publishedAt: a.publishedAt ?? Date.now(),
             fetchedAt: Date.now(),
           }));
-        const { kept: sorted, expiredUrls } = expireArticles(
+        const { kept: sorted, expired } = expireArticles(
           [...newArticles, ...currentArticles].sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
           feeds,
-          buildProtectedIds(readIds, progressMap, readerProgressMap)
+          readIds,
+          progressMap,
+          readerProgressMap
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
-        if (expiredUrls.length > 0) {
+        if (expired.length > 0) {
           const ts = Date.now();
-          for (const url of expiredUrls) {
-            if (url) dismissedUrlsRef.current.set(url, ts);
+          for (const { url, feedId } of expired) {
+            if (url) dismissedUrlsRef.current.set(url, { feedId, ts });
           }
           AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
         }
@@ -800,16 +862,18 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
             }));
           merged = [...newArticles, ...merged];
         }
-        const { kept: sorted, expiredUrls } = expireArticles(
+        const { kept: sorted, expired } = expireArticles(
           merged.sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0)),
           feeds,
-          buildProtectedIds(readIds, progressMap, readerProgressMap)
+          readIds,
+          progressMap,
+          readerProgressMap
         );
         AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
-        if (expiredUrls.length > 0) {
+        if (expired.length > 0) {
           const ts = Date.now();
-          for (const url of expiredUrls) {
-            if (url) dismissedUrlsRef.current.set(url, ts);
+          for (const { url, feedId } of expired) {
+            if (url) dismissedUrlsRef.current.set(url, { feedId, ts });
           }
           AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
         }
@@ -880,7 +944,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         : current.filter((a) => a.id !== articleId);
       AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
       if (article?.url) {
-        dismissedUrlsRef.current.set(article.url, Date.now());
+        dismissedUrlsRef.current.set(article.url, { feedId: article.feedId, ts: Date.now() });
         AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...dismissedUrlsRef.current.entries()]));
       }
       return updated;

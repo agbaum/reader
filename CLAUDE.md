@@ -2,6 +2,10 @@
 
 A personal RSS reader built for Android. Client-only — no backend, no sync, no accounts. The intended audience is one person (the developer).
 
+## Design Document
+
+A design document is maintained at `DESIGN.md`. Consult it for an overview of how the app works before making changes, and update it to reflect any changes you make to the architecture, components, data model, or key flows.
+
 ## Stack
 
 - **React Native + Expo** (~55) with Expo Router (file-based routing)

@@ -8,7 +8,7 @@ import React, {
     useRef,
     useState,
 } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState } from "react-native";
 
 export type ExpiryBucket = "6h" | "18h" | "3d" | "7d";
 
@@ -203,20 +203,10 @@ async function fetchFeedData(
     let xml: string;
     let redirectUrl = url;
 
-    if (Platform.OS === "web") {
-      // Browser needs a CORS proxy
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-      const response = await fetchWithTimeout(proxyUrl, 15000);
-      if (!response.ok) throw new Error(`Network error: ${response.status}`);
-      const data = await response.json();
-      xml = data.contents;
-    } else {
-      // React Native fetches directly — no CORS restriction on device
-      const response = await fetchWithTimeout(url, 15000);
-      if (!response.ok) throw new Error(`Network error: ${response.status}`);
-      redirectUrl = response.url || url; // final URL after any HTTP redirects
-      xml = await response.text();
-    }
+    const response = await fetchWithTimeout(url, 15000);
+    if (!response.ok) throw new Error(`Network error: ${response.status}`);
+    redirectUrl = response.url || url; // final URL after any HTTP redirects
+    xml = await response.text();
 
     if (!xml) throw new Error("Empty response");
 

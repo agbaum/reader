@@ -3,7 +3,6 @@ import * as Haptics from "expo-haptics";
 import React, { useCallback, useState } from "react";
 import {
   FlatList,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -80,7 +79,7 @@ export default function FeedsScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [settingsFeed, setSettingsFeed] = useState<Feed | null>(null);
 
-  const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
+  const topPad = insets.top;
 
   const renderItem = useCallback(
     ({ item }: { item: Feed }) => (
@@ -141,10 +140,7 @@ export default function FeedsScreen() {
         showsVerticalScrollIndicator={false}
         scrollEnabled={true}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
-        contentContainerStyle={[
-          styles.list,
-          Platform.OS === "web" && { paddingBottom: 34 },
-        ]}
+        contentContainerStyle={styles.list}
       />
       <AddFeedSheet visible={showAdd} onClose={() => setShowAdd(false)} />
       <FeedSettingsSheet feed={settingsFeed} onClose={() => setSettingsFeed(null)} />

@@ -7,7 +7,6 @@ import {
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -131,7 +130,7 @@ export default function TodayScreen() {
     [resetArticleExpiry, dismissArticle, handleDebugArticle, highlightedId, fadingIds, removeLingering]
   );
 
-  const topPad = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
+  const topPad = insets.top;
   const barHeight = topPad + 52;
 
   const barTranslateY = useRef(new Animated.Value(0)).current;
@@ -256,7 +255,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.background,
   },
   list: {
-    paddingBottom: Platform.OS === "web" ? 34 : 40,
+    paddingBottom: 40,
   },
   topBar: {
     position: "absolute",

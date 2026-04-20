@@ -49,7 +49,7 @@ Read state and progress are stored separately from articles to allow fast update
 
 ## Non-obvious decisions
 
-- **No backend.** Feed fetching happens on-device. On web, a CORS proxy (`api.allorigins.win`) is used since native platforms can fetch RSS directly. Don't introduce a server unless there's a strong reason.
+- **No backend.** Feed fetching happens on-device. Don't introduce a server unless there's a strong reason.
 - **Single context for all state.** `FeedsContext` handles feeds, articles, and read state. The app's data needs are simple enough that a query library would add overhead.
 - **Background refresh on launch.** The app loads from storage immediately, then silently refreshes all feeds. Don't break this pattern — instant display of cached content is intentional.
 - **Articles are capped at 50 per feed** to keep memory reasonable.

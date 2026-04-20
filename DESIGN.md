@@ -41,21 +41,18 @@ src/
     ErrorFallback.tsx     # Error UI with reload action
     FeedSettingsSheet.tsx # Per-feed config (label, expiry, reader mode)
     FeedsPanel.tsx        # Sidebar-embedded feeds list
-    KeyboardAwareScrollViewCompat.tsx  # Platform-aware keyboard scroll
     OPMLImportSheet.tsx   # OPML file picker + feed selector
     RecentlyReadPanel.tsx # Sidebar-embedded read history
     Sidebar.tsx           # Animated slide-out navigation panel
   context/
     FeedsContext.tsx      # Single source of truth: feeds, articles, read state
   hooks/
-    use-color-scheme.ts   # Native: re-exports RN useColorScheme
-    use-color-scheme.web.ts  # Web: hydration-safe color scheme
+    use-color-scheme.ts   # Re-exports RN useColorScheme
     use-open-article.ts   # Navigate to article with haptics
   constants/
     colors.ts             # Warm beige/brown palette
   lib/
     last-opened-article.ts  # Transient state for return-to-list highlight
-  global.css             # Web font stack definitions
 ```
 
 ---
@@ -160,8 +157,7 @@ No migrations exist. Changing a key name drops its data.
 
 ### Feed fetching details
 
-- Native: direct HTTP fetch
-- Web: CORS proxy via `api.allorigins.win`
+- Direct HTTP fetch
 - Auto-upgrade HTTP → HTTPS on failure
 - Image extraction: tries `media:content`, `enclosure`, then inline `<img>` from content
 - Date parsing: handles multiple RFC formats + timezone normalization
@@ -343,14 +339,6 @@ Inter 400/500/600/700 loaded via `expo-font` in the root layout before rendering
 ### Error handling
 
 `ErrorBoundary` (class component) wraps the whole app. On error: shows `ErrorFallback` with a "Try Again" button that calls `reloadAppAsync()`. Dev mode adds a stack trace inspector.
-
-### Platform differences
-
-| Concern | Native | Web |
-|---|---|---|
-| Feed fetching | Direct HTTP | Via CORS proxy |
-| Keyboard scroll | `react-native-keyboard-controller` | Standard `ScrollView` |
-| Color scheme | `useColorScheme` from RN | Hydration-safe hook |
 
 ### Theming
 

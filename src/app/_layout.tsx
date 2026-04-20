@@ -5,7 +5,6 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
@@ -18,8 +17,6 @@ import { FeedsProvider } from "@/context/FeedsContext";
 import Colors from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
-
-const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
@@ -62,7 +59,6 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
           <FeedsProvider>
             <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.light.background }}>
               <KeyboardProvider>
@@ -70,7 +66,6 @@ export default function RootLayout() {
               </KeyboardProvider>
             </GestureHandlerRootView>
           </FeedsProvider>
-        </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

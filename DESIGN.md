@@ -51,7 +51,6 @@ src/
     use-color-scheme.ts   # Native: re-exports RN useColorScheme
     use-color-scheme.web.ts  # Web: hydration-safe color scheme
     use-open-article.ts   # Navigate to article with haptics
-    use-theme.ts          # Returns Colors object for current scheme
   constants/
     colors.ts             # Warm beige/brown palette
   lib/
@@ -91,10 +90,10 @@ src/
   imageUrl?: string;
   publishedAt: number;        // Unix ms
   fetchedAt: number;          // Unix ms — expiry clock starts here
-  isRead: boolean;
-  isDismissed: boolean;
-  scrollProgress: number;     // 0–1, live WebView mode
-  readerScrollProgress: number; // 0–1, reader mode
+  isRead: boolean;             // derived at render time from rss_read_ids_v2
+  dismissed?: boolean;
+  scrollProgress: number;     // 0–1, live WebView mode — derived from rss_progress_v2
+  readerScrollProgress: number; // 0–1, reader mode — derived from rss_reader_progress_v2
   lastReadAt?: number;
 }
 ```
@@ -127,7 +126,7 @@ No migrations exist. Changing a key name drops its data.
 
 ## State Management: FeedsContext
 
-`FeedsContext` is the single source of truth. All screens and components consume it via `useFeeds()`. There is no secondary cache layer — TanStack Query is installed but not used for core state.
+`FeedsContext` is the single source of truth. All screens and components consume it via `useFeeds()`.
 
 ### Initialization sequence
 
@@ -145,7 +144,7 @@ No migrations exist. Changing a key name drops its data.
 | `refreshFeeds()` / `refreshFeed(id)` | Re-fetch and merge new articles, enforce expiry |
 | `markAsRead(id)` | Add to read-IDs set, persist |
 | `markAllAsRead(feedId?)` | Bulk mark by feed or globally |
-| `dismissArticle(id)` | Archive; keep if has scroll progress, otherwise discard |
+| `dismissArticle(id)` | Archive; keep if read or has scroll progress (for Recently Read), otherwise discard |
 | `resetArticleExpiry(id)` | Reset `fetchedAt` to now |
 | `updateFeedExpiry(id, bucket)` | Change retention window |
 | `updateFeedReaderMode(id, bool)` | Toggle Readability default |
@@ -185,7 +184,7 @@ The main reading interface. Shows all unread, non-dismissed, non-expired article
 - Empty state: "All caught up"
 
 **Article list filtering:**
-- Exclude `isRead` or `isDismissed` articles
+- Exclude `isRead` or `dismissed` articles
 - Keep articles currently in the linger-fade animation
 
 **Highlight animation:**
@@ -327,7 +326,6 @@ Dev-only tool (long-press on any article card). Shows all article fields: state,
 |---|---|
 | `useFeeds()` | Access FeedsContext |
 | `useOpenArticle()` | Navigate to `/article?id=…` with haptic |
-| `useTheme()` | Returns `Colors` object for light/dark scheme |
 | `useColorScheme()` | Platform-aware color scheme (hydration-safe on web) |
 
 ---
@@ -356,7 +354,7 @@ Inter 400/500/600/700 loaded via `expo-font` in the root layout before rendering
 
 ### Theming
 
-`colors.ts` defines a warm earthy palette (warm beige background, burnt-orange accent, dark-brown text). Dark mode infrastructure is stubbed (`use-theme.ts` returns light colors only). Switching is not yet implemented.
+`colors.ts` defines a warm earthy palette (warm beige background, burnt-orange accent, dark-brown text). Only light mode is implemented; dark mode is not supported.
 
 ---
 

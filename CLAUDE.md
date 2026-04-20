@@ -34,27 +34,29 @@ npx expo run:android
 
 ## Storage schema
 
-Three AsyncStorage keys — no migrations exist, so changing key names drops all data:
+Six AsyncStorage keys — no migrations exist, so changing key names drops all data:
 
 | Key | Contents |
 |-----|----------|
 | `rss_feeds_v2` | Array of `Feed` objects |
 | `rss_articles_v2` | Array of `Article` objects |
 | `rss_read_ids_v2` | Array of article ID strings |
+| `rss_progress_v2` | `Record<id, number>` — live scroll progress |
+| `rss_reader_progress_v2` | `Record<id, number>` — reader scroll progress |
+| `rss_dismissed_urls_v3` | `Record<url, {feedId, ts}>` — dismissed/expired URL cache |
 
-Read state is stored separately from articles to allow fast mark-as-read without rewriting the full article list.
+Read state and progress are stored separately from articles to allow fast updates without rewriting the full article list. These are merged onto `Article` objects at render time.
 
 ## Non-obvious decisions
 
 - **No backend.** Feed fetching happens on-device. On web, a CORS proxy (`api.allorigins.win`) is used since native platforms can fetch RSS directly. Don't introduce a server unless there's a strong reason.
-- **Single context for all state.** `FeedsContext` handles feeds, articles, and read state. `@tanstack/react-query` is installed but intentionally barely used — the app's data needs are simple enough that a QueryClient would add overhead.
+- **Single context for all state.** `FeedsContext` handles feeds, articles, and read state. The app's data needs are simple enough that a query library would add overhead.
 - **Background refresh on launch.** The app loads from storage immediately, then silently refreshes all feeds. Don't break this pattern — instant display of cached content is intentional.
 - **Articles are capped at 50 per feed** to keep memory reasonable.
 - **Portrait-only.** Don't add landscape support.
 
 ## Known gaps (don't fix unless asked)
 
-- Theme switching infrastructure is partially wired up but not complete (`use-theme.ts` references a missing `@/constants/theme` file)
 - No tests exist
 - The README is the default Expo template — it's not project docs
 - Article list has no pagination; this is acceptable at current scale

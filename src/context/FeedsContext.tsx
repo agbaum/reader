@@ -939,10 +939,13 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const dismissArticle = useCallback((articleId: string) => {
     setArticles((current) => {
       const article = current.find((a) => a.id === articleId);
-      const hasProgress = (progressMap[articleId] ?? 0) > 0 || (readerProgressMap[articleId] ?? 0) > 0;
-      // Keep articles with scroll progress so they remain in Recently Read;
+      const wasEngaged =
+        readIds.has(articleId) ||
+        (progressMap[articleId] ?? 0) > 0 ||
+        (readerProgressMap[articleId] ?? 0) > 0;
+      // Keep engaged articles (read or in-progress) so they remain in Recently Read;
       // fully-unread dismissed articles can be removed entirely.
-      const updated = hasProgress
+      const updated = wasEngaged
         ? current.map((a) => (a.id === articleId ? { ...a, dismissed: true } : a))
         : current.filter((a) => a.id !== articleId);
       AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
@@ -952,7 +955,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
       }
       return updated;
     });
-  }, [progressMap, readerProgressMap]);
+  }, [readIds, progressMap, readerProgressMap]);
 
   const resetArticleExpiry = useCallback(async (articleId: string) => {
     setArticles((current) => {

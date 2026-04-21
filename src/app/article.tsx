@@ -288,11 +288,28 @@ export default function ArticleScreen() {
 
   const handleNavigationStateChange = useCallback(
     ({ url }: { url: string }) => {
-      // In reader mode, we never navigate away — always treat as original page
       if (isReaderMode) return;
       if (url && article?.url && url !== article.url) {
         isOnOriginalPage.current = false;
       }
+    },
+    [article?.url, isReaderMode]
+  );
+
+  const handleShouldStartLoadWithRequest = useCallback(
+    ({ url }: { url: string }) => {
+      if (!url || url === "about:blank") return true;
+      if (isReaderMode) {
+        // Reader mode renders static HTML — any navigation is a link tap
+        WebBrowser.openBrowserAsync(url, { createTask: false });
+        return false;
+      }
+      // Live mode: allow loading the article's own URL, intercept everything else
+      if (article?.url && url !== article.url) {
+        WebBrowser.openBrowserAsync(url, { createTask: false });
+        return false;
+      }
+      return true;
     },
     [article?.url, isReaderMode]
   );
@@ -400,6 +417,7 @@ export default function ArticleScreen() {
           injectedJavaScript={injectedJS}
           onMessage={handleMessage}
           onNavigationStateChange={handleNavigationStateChange}
+          onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           javaScriptEnabled
           domStorageEnabled
           sharedCookiesEnabled

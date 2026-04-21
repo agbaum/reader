@@ -2,7 +2,7 @@
   "expo": {
     "name": "reader",
     "slug": "reader",
-    "version": "1.1.14",
+    "version": "1.1.15",
     "orientation": "portrait",
     "icon": "./assets/images/reader-logo.png",
     "scheme": "reader",
@@ -19,7 +19,7 @@
       "predictiveBackGestureEnabled": false,
       "usesCleartextTraffic": true,
       "package": "com.akpgreentree.reader",
-      "versionCode": 26
+      "versionCode": 27
     },
     "web": {
       "output": "static",

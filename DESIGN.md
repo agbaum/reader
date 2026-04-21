@@ -223,6 +223,7 @@ Modal (slide from bottom) for reading articles. Two modes:
 - Auto-mark read at ≥ 90% combined progress (live + reader)
 - Scroll position restored on mount (multiple retry attempts for render timing)
 - **Overscroll-to-close**: when already at bottom, swipe up >60pt dismisses with animation
+- **Link taps**: intercepted via `onShouldStartLoadWithRequest` — any link opens in an in-app browser overlay (`WebBrowser.openBrowserAsync`) rather than navigating the WebView. The article stays loaded underneath in both modes.
 
 **On exit:**
 - Calls `setLastOpenedArticle(id, wasRead)` for return-highlight on Today screen

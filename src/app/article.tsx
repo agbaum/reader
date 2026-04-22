@@ -231,7 +231,7 @@ export default function ArticleScreen() {
   const initialProgress = initialLiveMode ? savedLiveProgress : savedReaderProgress;
   const progressAnim = useRef(new Animated.Value(initialProgress)).current;
   const containerTranslateY = useRef(new Animated.Value(0)).current;
-  const [progressWidth, setProgressWidth] = useState(initialProgress);
+  const [trackWidth, setTrackWidth] = useState(0);
   const hasMarkedRead = useRef(article?.isRead ?? false);
   const isOnOriginalPage = useRef(true);
   const isDismissing = useRef(false);
@@ -342,9 +342,8 @@ export default function ArticleScreen() {
         Animated.timing(progressAnim, {
           toValue: p,
           duration: 100,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }).start();
-        setProgressWidth(p);
 
         const maxProgress = Math.max(readerProgressRef.current, liveProgressRef.current);
         if (!hasMarkedRead.current && maxProgress >= 0.9) {
@@ -379,7 +378,6 @@ export default function ArticleScreen() {
       const nextIsReaderMode = prev;
       const nextProgress = nextIsReaderMode ? readerProgressRef.current : liveProgressRef.current;
       progressAnim.setValue(nextProgress);
-      setProgressWidth(nextProgress);
       if (id) saveArticleMode(id, next);
       return next;
     });
@@ -475,15 +473,24 @@ export default function ArticleScreen() {
         </View>
 
         {/* Reading progress bar */}
-        <View style={styles.progressTrack}>
+        <View
+          style={styles.progressTrack}
+          onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+        >
           <Animated.View
             style={[
               styles.progressFill,
               {
-                width: progressAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ["0%", "100%"],
-                }),
+                width: trackWidth,
+                transform: [
+                  {
+                    translateX: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-trackWidth / 2, 0],
+                    }),
+                  },
+                  { scaleX: progressAnim },
+                ],
               },
             ]}
           />

@@ -53,7 +53,7 @@ export interface Article {
   dismissed?: boolean;
   scrollProgress?: number;
   readerScrollProgress?: number;
-  lastReadAt?: number;
+  lastOpened?: number;
   author?: string;
   expiryBucket?: ExpiryBucket;
 }
@@ -77,6 +77,7 @@ interface FeedsContextValue {
   saveScrollProgress: (articleId: string, progress: number) => void;
   saveReaderScrollProgress: (articleId: string, progress: number) => void;
   saveArticleMode: (articleId: string, isLiveMode: boolean) => void;
+  markArticleOpened: (articleId: string) => void;
   articleModeMap: Record<string, boolean>;
   unreadCount: number;
 }
@@ -579,31 +580,25 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveScrollProgress = useCallback((articleId: string, progress: number) => {
-    const now = Date.now();
     setProgressMap((current) => {
       const updated = { ...current, [articleId]: progress };
       AsyncStorage.setItem(PROGRESS_KEY, JSON.stringify(updated));
       return updated;
     });
-    setArticles((current) => {
-      const updated = current.map((a) =>
-        a.id === articleId ? { ...a, lastReadAt: now } : a
-      );
-      AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
-      return updated;
-    });
   }, []);
 
   const saveReaderScrollProgress = useCallback((articleId: string, progress: number) => {
-    const now = Date.now();
     setReaderProgressMap((current) => {
       const updated = { ...current, [articleId]: progress };
       AsyncStorage.setItem(READER_PROGRESS_KEY, JSON.stringify(updated));
       return updated;
     });
+  }, []);
+
+  const markArticleOpened = useCallback((articleId: string) => {
     setArticles((current) => {
       const updated = current.map((a) =>
-        a.id === articleId ? { ...a, lastReadAt: now } : a
+        a.id === articleId ? { ...a, lastOpened: Date.now() } : a
       );
       AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
       return updated;
@@ -1009,6 +1004,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         saveScrollProgress,
         saveReaderScrollProgress,
         saveArticleMode,
+        markArticleOpened,
         articleModeMap,
         unreadCount,
       }}

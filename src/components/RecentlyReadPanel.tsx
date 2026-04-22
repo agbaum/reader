@@ -26,7 +26,7 @@ export function RecentlyReadPanel({ visible, onClose }: RecentlyReadPanelProps) 
 
   const readArticles = articles
     .filter((a) => a.isRead || Math.max(a.scrollProgress ?? 0, a.readerScrollProgress ?? 0) > 0)
-    .sort((a, b) => (b.lastReadAt ?? b.publishedAt ?? 0) - (a.lastReadAt ?? a.publishedAt ?? 0));
+    .sort((a, b) => (b.lastOpened ?? b.publishedAt ?? 0) - (a.lastOpened ?? a.publishedAt ?? 0));
 
   const renderItem = useCallback(
     ({ item }: { item: Article }) => (

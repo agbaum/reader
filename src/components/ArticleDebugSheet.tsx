@@ -117,8 +117,8 @@ export function ArticleDebugSheet({ article, onClose }: Props) {
           <Section title="Timestamps">
             <Field label="Published" value={a.publishedAt ? `${fmt(a.publishedAt)}  ·  ${relativeTime(a.publishedAt)}` : "—"} />
             <Field label="Fetched" value={a.fetchedAt ? `${fmt(a.fetchedAt)}  ·  ${relativeTime(a.fetchedAt)}` : "—"} />
-            {!!a.lastReadAt && (
-              <Field label="Last read" value={`${fmt(a.lastReadAt)}  ·  ${relativeTime(a.lastReadAt)}`} />
+            {!!a.lastOpened && (
+              <Field label="Last opened" value={`${fmt(a.lastOpened)}  ·  ${relativeTime(a.lastOpened)}`} />
             )}
           </Section>
 

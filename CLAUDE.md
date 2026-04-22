@@ -44,6 +44,7 @@ Six AsyncStorage keys — no migrations exist, so changing key names drops all d
 | `rss_progress_v2` | `Record<id, number>` — live scroll progress |
 | `rss_reader_progress_v2` | `Record<id, number>` — reader scroll progress |
 | `rss_dismissed_urls_v3` | `Record<url, {feedId, ts}>` — dismissed/expired URL cache |
+| `rss_article_modes_v1` | `Record<id, boolean>` — per-article mode override (`true` = live/web, `false` = reader) |
 
 Read state and progress are stored separately from articles to allow fast updates without rewriting the full article list. These are merged onto `Article` objects at render time.
 

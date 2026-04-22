@@ -210,7 +210,7 @@ export default function ArticleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
-  const { feeds, articles, markAsRead, saveScrollProgress, saveReaderScrollProgress } = useFeeds();
+  const { feeds, articles, markAsRead, saveScrollProgress, saveReaderScrollProgress, saveArticleMode, articleModeMap } = useFeeds();
 
   const article = articles.find((a) => a.id === id);
   const feed = article ? feeds.find((f) => f.id === article.feedId) : undefined;
@@ -219,13 +219,16 @@ export default function ArticleScreen() {
   const savedLiveProgress = article?.scrollProgress ?? 0;
   const savedReaderProgress = article?.readerScrollProgress ?? 0;
 
+  const savedMode = id !== undefined ? articleModeMap[id] : undefined;
+  const initialLiveMode = savedMode !== undefined ? savedMode : !feedReaderMode;
+
   const [readerHtml, setReaderHtml] = useState<string | null>(null);
   const [readerLoading, setReaderLoading] = useState(true);
-  const [liveMode, setLiveMode] = useState(!feedReaderMode);
+  const [liveMode, setLiveMode] = useState(initialLiveMode);
 
   const readerProgressRef = useRef(savedReaderProgress);
   const liveProgressRef = useRef(savedLiveProgress);
-  const initialProgress = feedReaderMode ? savedReaderProgress : savedLiveProgress;
+  const initialProgress = initialLiveMode ? savedLiveProgress : savedReaderProgress;
   const progressAnim = useRef(new Animated.Value(initialProgress)).current;
   const containerTranslateY = useRef(new Animated.Value(0)).current;
   const [progressWidth, setProgressWidth] = useState(initialProgress);
@@ -372,13 +375,15 @@ export default function ArticleScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     isOnOriginalPage.current = true;
     setLiveMode((prev) => {
+      const next = !prev;
       const nextIsReaderMode = prev;
       const nextProgress = nextIsReaderMode ? readerProgressRef.current : liveProgressRef.current;
       progressAnim.setValue(nextProgress);
       setProgressWidth(nextProgress);
-      return !prev;
+      if (id) saveArticleMode(id, next);
+      return next;
     });
-  }, [progressAnim]);
+  }, [progressAnim, id, saveArticleMode]);
 
   if (!article) {
     return (

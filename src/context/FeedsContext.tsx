@@ -76,6 +76,8 @@ interface FeedsContextValue {
   dismissArticle: (articleId: string) => void;
   saveScrollProgress: (articleId: string, progress: number) => void;
   saveReaderScrollProgress: (articleId: string, progress: number) => void;
+  saveArticleMode: (articleId: string, isLiveMode: boolean) => void;
+  articleModeMap: Record<string, boolean>;
   unreadCount: number;
 }
 
@@ -87,6 +89,7 @@ const READ_KEY = "rss_read_ids_v2";
 const PROGRESS_KEY = "rss_progress_v2";
 const READER_PROGRESS_KEY = "rss_reader_progress_v2";
 const DISMISSED_URLS_KEY = "rss_dismissed_urls_v3";
+const ARTICLE_MODES_KEY = "rss_article_modes_v1";
 // Time-based cutoff for entries from deleted feeds (active feeds use per-feed minimum instead)
 const MAX_DISMISSED_AGE = 14 * 24 * 60 * 60 * 1000;
 const MAX_DISMISSED_PER_FEED = 50; // matches article cap per feed
@@ -401,6 +404,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [progressMap, setProgressMap] = useState<Record<string, number>>({});
   const [readerProgressMap, setReaderProgressMap] = useState<Record<string, number>>({});
+  const [articleModeMap, setArticleModeMap] = useState<Record<string, boolean>>({});
   const dismissedUrlsRef = useRef<Map<string, DismissedEntry>>(new Map());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const initialLoadDone = useRef(false);
@@ -418,13 +422,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [feedsStr, articlesStr, readStr, progressStr, readerProgressStr, dismissedStr] = await Promise.all([
+        const [feedsStr, articlesStr, readStr, progressStr, readerProgressStr, dismissedStr, articleModesStr] = await Promise.all([
           AsyncStorage.getItem(FEEDS_KEY),
           AsyncStorage.getItem(ARTICLES_KEY),
           AsyncStorage.getItem(READ_KEY),
           AsyncStorage.getItem(PROGRESS_KEY),
           AsyncStorage.getItem(READER_PROGRESS_KEY),
           AsyncStorage.getItem(DISMISSED_URLS_KEY),
+          AsyncStorage.getItem(ARTICLE_MODES_KEY),
         ]);
 
         const loadedFeeds: Feed[] = feedsStr ? JSON.parse(feedsStr) : [];
@@ -447,11 +452,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           await AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...prunedDismissed.entries()]));
         }
 
+        const loadedArticleModes: Record<string, boolean> = articleModesStr ? JSON.parse(articleModesStr) : {};
+
         setFeeds(loadedFeeds);
         setArticles(loadedArticles);
         setReadIds(loadedReadIds);
         setProgressMap(loadedProgress);
         setReaderProgressMap(loadedReaderProgress);
+        setArticleModeMap(loadedArticleModes);
 
         // Background refresh using loaded data directly (avoids stale closure)
         if (loadedFeeds.length > 0) {
@@ -598,6 +606,14 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         a.id === articleId ? { ...a, lastReadAt: now } : a
       );
       AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const saveArticleMode = useCallback((articleId: string, isLiveMode: boolean) => {
+    setArticleModeMap((current) => {
+      const updated = { ...current, [articleId]: isLiveMode };
+      AsyncStorage.setItem(ARTICLE_MODES_KEY, JSON.stringify(updated));
       return updated;
     });
   }, []);
@@ -992,6 +1008,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         dismissArticle,
         saveScrollProgress,
         saveReaderScrollProgress,
+        saveArticleMode,
+        articleModeMap,
         unreadCount,
       }}
     >

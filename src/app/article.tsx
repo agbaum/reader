@@ -144,18 +144,29 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMo
       }
       window.addEventListener('scroll', sendProgress, { passive: true });
 
-      // Overscroll-to-close: swipe up past threshold when already at bottom
+      // Overscroll-to-close: drag card up past threshold when already at bottom
+      var isDragging = false;
       window.addEventListener('touchstart', function(e) {
         touchStartY = e.touches[0].clientY;
+        isDragging = atBottom;
       }, { passive: true });
 
       window.addEventListener('touchmove', function(e) {
-        if (dismissed || !atBottom) return;
+        if (dismissed || !isDragging) return;
         var dy = touchStartY - e.touches[0].clientY;
-        if (dy > 60) {
-          dismissed = true;
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dismiss' }));
+        if (dy < 0) {
+          isDragging = false;
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dragCancel' }));
+          return;
         }
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'drag', dy: dy }));
+      }, { passive: true });
+
+      window.addEventListener('touchend', function(e) {
+        if (!isDragging) return;
+        isDragging = false;
+        var dy = touchStartY - e.changedTouches[0].clientY;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dragEnd', dy: dy }));
       }, { passive: true });
 
       ${
@@ -322,8 +333,38 @@ export default function ArticleScreen() {
       try {
         const data = JSON.parse(event.nativeEvent.data);
 
-        if (data.type === "dismiss") {
-          dismissUp();
+        if (data.type === "drag") {
+          if (!isDismissing.current) {
+            containerTranslateY.setValue(-Math.max(0, data.dy as number));
+          }
+          return;
+        }
+
+        if (data.type === "dragEnd") {
+          if (!isDismissing.current) {
+            if ((data.dy as number) > 120) {
+              dismissUp();
+            } else {
+              Animated.spring(containerTranslateY, {
+                toValue: 0,
+                useNativeDriver: true,
+                tension: 120,
+                friction: 10,
+              }).start();
+            }
+          }
+          return;
+        }
+
+        if (data.type === "dragCancel") {
+          if (!isDismissing.current) {
+            Animated.spring(containerTranslateY, {
+              toValue: 0,
+              useNativeDriver: true,
+              tension: 120,
+              friction: 10,
+            }).start();
+          }
           return;
         }
 

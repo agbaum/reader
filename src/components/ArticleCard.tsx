@@ -135,9 +135,6 @@ export function ArticleCard({
   const hapticLight = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
-  const hapticMedium = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, []);
 
   const triggerDismiss = useCallback((id: string) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -168,7 +165,6 @@ export function ArticleCard({
       }
       if (abs > DISMISS_THRESHOLD && !hasCrossedDismiss.value) {
         hasCrossedDismiss.value = true;
-        runOnJS(hapticMedium)();
       } else if (abs <= DISMISS_THRESHOLD && hasCrossedDismiss.value) {
         hasCrossedDismiss.value = false;
       }

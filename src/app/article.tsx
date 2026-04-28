@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   Pressable,
   StyleSheet,
   Text,
@@ -293,7 +294,8 @@ export default function ArticleScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.timing(containerTranslateY, {
       toValue: -screenHeight,
-      duration: 220,
+      duration: 150,
+      easing: Easing.in(Easing.ease),
       useNativeDriver: true,
     }).start(() => {
       router.back();
@@ -335,7 +337,12 @@ export default function ArticleScreen() {
 
         if (data.type === "drag") {
           if (!isDismissing.current) {
-            containerTranslateY.setValue(-Math.max(0, data.dy as number));
+            Animated.timing(containerTranslateY, {
+              toValue: -Math.max(0, data.dy as number),
+              duration: 60,
+              easing: Easing.linear,
+              useNativeDriver: true,
+            }).start();
           }
           return;
         }

@@ -127,6 +127,7 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMo
     (function() {
       var atBottom = false;
       var touchStartY = 0;
+      var touchStartTime = 0;
       var dismissed = false;
       ${restoreProgress > 0 ? "var restored = false;" : ""}
 
@@ -149,25 +150,29 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMo
       var isDragging = false;
       window.addEventListener('touchstart', function(e) {
         touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
         isDragging = atBottom;
       }, { passive: true });
 
       window.addEventListener('touchmove', function(e) {
         if (dismissed || !isDragging) return;
-        var dy = touchStartY - e.touches[0].clientY;
-        if (dy < 0) {
+        var rawDy = touchStartY - e.touches[0].clientY;
+        if (rawDy < 0) {
           isDragging = false;
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dragCancel' }));
           return;
         }
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'drag', dy: dy }));
+        // Hyperbolic resistance: starts 1:1, smoothly transitions to diminishing returns
+        var visualDy = rawDy / (1 + rawDy / 200);
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'drag', dy: visualDy, rawDy: rawDy }));
       }, { passive: true });
 
       window.addEventListener('touchend', function(e) {
         if (!isDragging) return;
         isDragging = false;
-        var dy = touchStartY - e.changedTouches[0].clientY;
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dragEnd', dy: dy }));
+        var rawDy = touchStartY - e.changedTouches[0].clientY;
+        var velocity = rawDy / Math.max(1, Date.now() - touchStartTime);
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dragEnd', dy: rawDy, velocity: velocity }));
       }, { passive: true });
 
       ${
@@ -287,20 +292,22 @@ export default function ArticleScreen() {
     };
   }, [article?.url]);
 
-  const dismissUp = useCallback(() => {
+  const dismissUp = useCallback((velocity = 0) => {
     if (isDismissing.current) return;
     isDismissing.current = true;
     if (id) setLastOpenedArticle(id, hasMarkedRead.current);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Scale duration inversely with velocity so flicks feel fast
+    const duration = Math.max(80, Math.min(150, Math.round(120 / Math.max(velocity, 0.8))));
     Animated.timing(containerTranslateY, {
       toValue: -screenHeight,
-      duration: 150,
+      duration,
       easing: Easing.in(Easing.ease),
       useNativeDriver: true,
     }).start(() => {
       router.back();
     });
-  }, [containerTranslateY, screenHeight, router]);
+  }, [containerTranslateY, screenHeight, router, id]);
 
   const handleNavigationStateChange = useCallback(
     ({ url }: { url: string }) => {
@@ -337,20 +344,18 @@ export default function ArticleScreen() {
 
         if (data.type === "drag") {
           if (!isDismissing.current) {
-            Animated.timing(containerTranslateY, {
-              toValue: -Math.max(0, data.dy as number),
-              duration: 60,
-              easing: Easing.linear,
-              useNativeDriver: true,
-            }).start();
+            // setValue gives instant 1:1 tracking — no chasing animation lag
+            containerTranslateY.setValue(-Math.max(0, data.dy as number));
           }
           return;
         }
 
         if (data.type === "dragEnd") {
           if (!isDismissing.current) {
-            if ((data.dy as number) > 120) {
-              dismissUp();
+            const dy = data.dy as number;
+            const velocity = (data.velocity as number) ?? 0;
+            if (dy > 120 || (velocity > 0.5 && dy > 40)) {
+              dismissUp(velocity);
             } else {
               Animated.spring(containerTranslateY, {
                 toValue: 0,

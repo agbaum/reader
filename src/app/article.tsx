@@ -8,11 +8,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  Easing,
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -125,10 +123,6 @@ function buildReaderHtml(
 function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMode: boolean): string {
   return `
     (function() {
-      var atBottom = false;
-      var touchStartY = 0;
-      var touchStartTime = 0;
-      var dismissed = false;
       ${restoreProgress > 0 ? "var restored = false;" : ""}
 
       function getDocHeight() {
@@ -141,39 +135,9 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMo
       function sendProgress() {
         var h = getDocHeight();
         var progress = h > 0 ? window.scrollY / h : 0;
-        atBottom = h <= 0 || window.scrollY >= h - 2;
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'scroll', progress: progress }));
       }
       window.addEventListener('scroll', sendProgress, { passive: true });
-
-      // Overscroll-to-close: drag card up past threshold when already at bottom
-      var isDragging = false;
-      window.addEventListener('touchstart', function(e) {
-        touchStartY = e.touches[0].clientY;
-        touchStartTime = Date.now();
-        isDragging = atBottom;
-      }, { passive: true });
-
-      window.addEventListener('touchmove', function(e) {
-        if (dismissed || !isDragging) return;
-        var rawDy = touchStartY - e.touches[0].clientY;
-        if (rawDy < 0) {
-          isDragging = false;
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dragCancel' }));
-          return;
-        }
-        // Hyperbolic resistance: starts 1:1, smoothly transitions to diminishing returns
-        var visualDy = rawDy / (1 + rawDy / 200);
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'drag', dy: visualDy, rawDy: rawDy }));
-      }, { passive: true });
-
-      window.addEventListener('touchend', function(e) {
-        if (!isDragging) return;
-        isDragging = false;
-        var rawDy = touchStartY - e.changedTouches[0].clientY;
-        var velocity = rawDy / Math.max(1, Date.now() - touchStartTime);
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'dragEnd', dy: rawDy, velocity: velocity }));
-      }, { passive: true });
 
       ${
         restoreProgress > 0
@@ -226,7 +190,6 @@ export default function ArticleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
   const { feeds, articles, markAsRead, saveScrollProgress, saveReaderScrollProgress, saveArticleMode, articleModeMap } = useFeeds();
 
   const article = articles.find((a) => a.id === id);
@@ -247,11 +210,9 @@ export default function ArticleScreen() {
   const liveProgressRef = useRef(savedLiveProgress);
   const initialProgress = initialLiveMode ? savedLiveProgress : savedReaderProgress;
   const progressAnim = useRef(new Animated.Value(initialProgress)).current;
-  const containerTranslateY = useRef(new Animated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
   const hasMarkedRead = useRef(article?.isRead ?? false);
   const isOnOriginalPage = useRef(true);
-  const isDismissing = useRef(false);
 
   const isReaderMode = !liveMode;
 
@@ -292,23 +253,6 @@ export default function ArticleScreen() {
     };
   }, [article?.url]);
 
-  const dismissUp = useCallback((velocity = 0) => {
-    if (isDismissing.current) return;
-    isDismissing.current = true;
-    if (id) setLastOpenedArticle(id, hasMarkedRead.current);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // Scale duration inversely with velocity so flicks feel fast
-    const duration = Math.max(80, Math.min(150, Math.round(120 / Math.max(velocity, 0.8))));
-    Animated.timing(containerTranslateY, {
-      toValue: -screenHeight,
-      duration,
-      easing: Easing.in(Easing.ease),
-      useNativeDriver: true,
-    }).start(() => {
-      router.back();
-    });
-  }, [containerTranslateY, screenHeight, router, id]);
-
   const handleNavigationStateChange = useCallback(
     ({ url }: { url: string }) => {
       if (isReaderMode) return;
@@ -342,44 +286,6 @@ export default function ArticleScreen() {
       try {
         const data = JSON.parse(event.nativeEvent.data);
 
-        if (data.type === "drag") {
-          if (!isDismissing.current) {
-            // setValue gives instant 1:1 tracking — no chasing animation lag
-            containerTranslateY.setValue(-Math.max(0, data.dy as number));
-          }
-          return;
-        }
-
-        if (data.type === "dragEnd") {
-          if (!isDismissing.current) {
-            const dy = data.dy as number;
-            const velocity = (data.velocity as number) ?? 0;
-            if (dy > 120 || (velocity > 0.5 && dy > 40)) {
-              dismissUp(velocity);
-            } else {
-              Animated.spring(containerTranslateY, {
-                toValue: 0,
-                useNativeDriver: true,
-                tension: 120,
-                friction: 10,
-              }).start();
-            }
-          }
-          return;
-        }
-
-        if (data.type === "dragCancel") {
-          if (!isDismissing.current) {
-            Animated.spring(containerTranslateY, {
-              toValue: 0,
-              useNativeDriver: true,
-              tension: 120,
-              friction: 10,
-            }).start();
-          }
-          return;
-        }
-
         if (data.type !== "scroll" || !id || !isOnOriginalPage.current) return;
 
         const p: number = Math.min(1, Math.max(0, data.progress));
@@ -407,7 +313,7 @@ export default function ArticleScreen() {
         // ignore malformed messages
       }
     },
-    [id, isReaderMode, markAsRead, saveScrollProgress, saveReaderScrollProgress, progressAnim, dismissUp]
+    [id, isReaderMode, markAsRead, saveScrollProgress, saveReaderScrollProgress, progressAnim]
   );
 
   const openInBrowser = useCallback(() => {
@@ -457,9 +363,7 @@ export default function ArticleScreen() {
   const injectedJS = buildInjectedJS(savedProgress, article.url, isReaderMode);
 
   return (
-    <Animated.View
-      style={[styles.container, { transform: [{ translateY: containerTranslateY }] }]}
-    >
+    <View style={styles.container}>
       {readerLoading && !liveMode ? (
         <View style={[styles.loadingContainer, { marginTop: barHeight }]}>
           <ActivityIndicator size="small" color={Colors.light.textSecondary} />
@@ -549,7 +453,21 @@ export default function ArticleScreen() {
           />
         </View>
       </View>
-    </Animated.View>
+
+      {/* Bottom close button — easier to dismiss after reading than reaching back to top */}
+      <View
+        style={[styles.closeBtnContainer, { bottom: insets.bottom + 14 }]}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          onPress={handleBack}
+          hitSlop={12}
+          style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.5 }]}
+        >
+          <Feather name="x" size={16} color={Colors.light.textTertiary} />
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -615,5 +533,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
+  },
+  closeBtnContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.light.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.light.border,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

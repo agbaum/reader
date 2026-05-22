@@ -324,6 +324,7 @@ export default function ArticleScreen() {
             useNativeDriver: true,
             tension: 120,
             friction: 8,
+            clamp: true,
           }).start();
         }
       } catch {
@@ -493,7 +494,7 @@ export default function ArticleScreen() {
           hitSlop={12}
           style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.5 }]}
         >
-          <Feather name="x" size={48} color={Colors.light.textTertiary} />
+          <Feather name="x" size={48} color={Colors.light.accent} />
         </Pressable>
       </Animated.View>
     </View>

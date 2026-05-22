@@ -479,12 +479,20 @@ export default function ArticleScreen() {
           { top: Dimensions.get("window").height * (2 / 3) - 48 },
           {
             opacity: closeBtnAnim,
-            transform: [{
-              translateY: closeBtnAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [60, 0],
-              }),
-            }],
+            transform: [
+              {
+                translateY: closeBtnAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [60, 0],
+                }),
+              },
+              {
+                scale: closeBtnAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 1],
+                }),
+              },
+            ],
           },
         ]}
         pointerEvents={atBottom ? "box-none" : "none"}

@@ -324,6 +324,7 @@ export default function ArticleScreen() {
             useNativeDriver: true,
             tension: 120,
             friction: 8,
+            clamp: true,
           }).start();
         }
       } catch {

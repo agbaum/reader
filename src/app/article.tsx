@@ -214,6 +214,10 @@ export default function ArticleScreen() {
   const hasMarkedRead = useRef(article?.isRead ?? false);
   const isOnOriginalPage = useRef(true);
 
+  const [atBottom, setAtBottom] = useState(false);
+  const atBottomRef = useRef(false);
+  const closeBtnAnim = useRef(new Animated.Value(0)).current;
+
   const isReaderMode = !liveMode;
 
   // Ensure highlight fires on the article card regardless of how we exit
@@ -309,11 +313,23 @@ export default function ArticleScreen() {
           hasMarkedRead.current = true;
           markAsRead(id);
         }
+
+        const newAtBottom = p >= 0.95;
+        if (newAtBottom !== atBottomRef.current) {
+          atBottomRef.current = newAtBottom;
+          setAtBottom(newAtBottom);
+          Animated.spring(closeBtnAnim, {
+            toValue: newAtBottom ? 1 : 0,
+            useNativeDriver: true,
+            tension: 120,
+            friction: 8,
+          }).start();
+        }
       } catch {
         // ignore malformed messages
       }
     },
-    [id, isReaderMode, markAsRead, saveScrollProgress, saveReaderScrollProgress, progressAnim]
+    [id, isReaderMode, markAsRead, saveScrollProgress, saveReaderScrollProgress, progressAnim, closeBtnAnim]
   );
 
   const openInBrowser = useCallback(() => {
@@ -454,19 +470,37 @@ export default function ArticleScreen() {
         </View>
       </View>
 
-      {/* Bottom close button — easier to dismiss after reading than reaching back to top */}
+      {/* Bottom strip — subtle always-visible anchor at the screen edge */}
       <View
-        style={[styles.closeBtnContainer, { bottom: insets.bottom + 14 }]}
-        pointerEvents="box-none"
+        style={[styles.bottomStrip, { bottom: insets.bottom }]}
+        pointerEvents="none"
+      />
+
+      {/* Bottom close button — slides up from strip when reader reaches the end */}
+      <Animated.View
+        style={[
+          styles.closeBtnContainer,
+          { bottom: insets.bottom + 10 },
+          {
+            opacity: closeBtnAnim,
+            transform: [{
+              translateY: closeBtnAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [80, 0],
+              }),
+            }],
+          },
+        ]}
+        pointerEvents={atBottom ? "box-none" : "none"}
       >
         <Pressable
           onPress={handleBack}
           hitSlop={12}
           style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.5 }]}
         >
-          <Feather name="x" size={16} color={Colors.light.textTertiary} />
+          <Feather name="x" size={48} color={Colors.light.textTertiary} />
         </Pressable>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -534,6 +568,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
   },
+  bottomStrip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: Colors.light.border,
+    opacity: 0.6,
+  },
   closeBtnContainer: {
     position: "absolute",
     left: 0,
@@ -541,9 +583,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: Colors.light.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.light.border,

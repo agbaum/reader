@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Dimensions,
   Pressable,
   StyleSheet,
   Text,
@@ -314,7 +315,7 @@ export default function ArticleScreen() {
           markAsRead(id);
         }
 
-        const newAtBottom = p >= 0.95;
+        const newAtBottom = p >= 0.99;
         if (newAtBottom !== atBottomRef.current) {
           atBottomRef.current = newAtBottom;
           setAtBottom(newAtBottom);
@@ -470,23 +471,17 @@ export default function ArticleScreen() {
         </View>
       </View>
 
-      {/* Bottom strip — subtle always-visible anchor at the screen edge */}
-      <View
-        style={[styles.bottomStrip, { bottom: insets.bottom }]}
-        pointerEvents="none"
-      />
-
-      {/* Bottom close button — slides up from strip when reader reaches the end */}
+      {/* Bottom close button — slides in at 2/3 screen height when reader reaches the end */}
       <Animated.View
         style={[
           styles.closeBtnContainer,
-          { bottom: insets.bottom + 10 },
+          { top: Dimensions.get("window").height * (2 / 3) - 48 },
           {
             opacity: closeBtnAnim,
             transform: [{
               translateY: closeBtnAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [80, 0],
+                outputRange: [60, 0],
               }),
             }],
           },
@@ -568,14 +563,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
   },
-  bottomStrip: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: Colors.light.border,
-    opacity: 0.6,
-  },
   closeBtnContainer: {
     position: "absolute",
     left: 0,
@@ -591,5 +578,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.border,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });

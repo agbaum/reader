@@ -45,6 +45,7 @@ export interface Article {
   feedUrl: string;
   title: string;
   description?: string;
+  content?: string; // Raw HTML from feed's <content> / <content:encoded> tag
   url: string;
   imageUrl?: string;
   publishedAt?: number;
@@ -151,6 +152,19 @@ function decodeEntities(text: string): string {
 
 function stripHtml(html: string): string {
   return decodeEntities(html?.replace(/<[^>]*>/g, "") ?? "").trim();
+}
+
+// Extracts the first substantial text block from HTML, skipping short nav/boilerplate lines.
+function extractDescription(html: string, limit = 300): string {
+  if (!html) return "";
+  const spaced = html
+    .replace(/<\/(?:p|div|td|tr|li|h[1-6])[^>]*>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n");
+  const stripped = decodeEntities(spaced.replace(/<[^>]*>/g, "")).trim();
+  for (const seg of stripped.split(/\n+/).map((s) => s.trim()).filter(Boolean)) {
+    if (seg.length >= 50) return seg.slice(0, limit);
+  }
+  return stripped.replace(/\s+/g, " ").trim().slice(0, limit);
 }
 
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
@@ -271,6 +285,7 @@ async function fetchFeedData(
       let title = "";
       let link = "";
       let description = "";
+      let content = "";
       let pubDate = "";
       let author = "";
       let imageUrl = "";
@@ -278,18 +293,18 @@ async function fetchFeedData(
       if (isAtom) {
         title = stripHtml(getTagContent(item, "title"));
         link = getAttr(item, "link", "href") || getTagContent(item, "link");
-        description = getTagContent(item, "summary") || getTagContent(item, "content");
+        const rawDesc = getTagContent(item, "summary") || getTagContent(item, "content");
         pubDate = getTagContent(item, "published") || getTagContent(item, "updated");
         author = getTagContent(item, "name") || getTagContent(item, "author");
-        imageUrl = extractImageFromContent(description) ?? "";
-        description = stripHtml(description);
+        imageUrl = extractImageFromContent(rawDesc) ?? "";
+        description = extractDescription(rawDesc);
+        if (rawDesc.includes("<") && rawDesc.length > 200) content = rawDesc.slice(0, 100000);
       } else {
         title = stripHtml(getTagContent(item, "title"));
         link = getTagContent(item, "link");
         if (!link) link = getAttr(item, "link", "href");
-        description =
-          getTagContent(item, "description") ||
-          getTagContent(item, "content:encoded");
+        const contentEncoded = getTagContent(item, "content:encoded");
+        const rawDesc = contentEncoded || getTagContent(item, "description");
         pubDate = getTagContent(item, "pubDate") || getTagContent(item, "dc:date");
         author = getTagContent(item, "author") || getTagContent(item, "dc:creator");
 
@@ -298,11 +313,12 @@ async function fetchFeedData(
         imageUrl =
           mediaUrlMatch?.[1] ??
           enclosureMatch?.[1] ??
-          extractImageFromContent(getTagContent(item, "content:encoded")) ??
-          extractImageFromContent(description) ??
+          extractImageFromContent(contentEncoded) ??
+          extractImageFromContent(rawDesc) ??
           "";
 
-        description = stripHtml(description);
+        description = extractDescription(rawDesc);
+        if (rawDesc.includes("<") && rawDesc.length > 200) content = rawDesc.slice(0, 100000);
       }
 
       const publishedAt = parsePubDate(pubDate);
@@ -311,7 +327,8 @@ async function fetchFeedData(
         id: generateId(),
         title: title || "Untitled",
         url: link,
-        description: description?.slice(0, 300),
+        description: description || undefined,
+        content: content || undefined,
         imageUrl: imageUrl || undefined,
         publishedAt,
         author: author || undefined,

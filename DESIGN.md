@@ -83,6 +83,7 @@ src/
   url: string;
   title: string;
   description?: string;
+  content?: string;           // Raw HTML from feed's <content> / <content:encoded> (≤100KB); used by reader mode to avoid re-fetching the URL
   author?: string;
   imageUrl?: string;
   publishedAt: number;        // Unix ms
@@ -207,10 +208,10 @@ Feed management. Lists all feeds with unread/total counts, expiry bucket, and pe
 Modal (slide from bottom) for reading articles. Two modes:
 
 #### Reader Mode (default when `feed.readerMode = true`)
-1. Fetch article HTML from URL
+1. If `article.content` is set (HTML stored from feed), use that; otherwise fetch HTML from URL
 2. Run Mozilla Readability → extract `title`, `byline`, `content`
 3. Render extracted HTML in a `WebView` with injected CSS (serif fonts, proper spacing, styled blockquotes/code/images)
-4. If Readability fails → auto-fallback to Live Mode
+4. If Readability fails or returns < 100 chars → auto-fallback to Live Mode
 
 #### Live Mode
 - Raw `WebView` pointing directly at article URL

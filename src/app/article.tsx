@@ -48,9 +48,19 @@ function buildReaderHtml(
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 18px;
     line-height: 1.75;
-    padding: 24px 20px 80px;
+    padding: 24px 20px 0;
     max-width: 680px;
     margin: 0 auto;
+  }
+  .reader-footer {
+    margin-top: 48px;
+    padding-bottom: 120px;
+    text-align: center;
+  }
+  .reader-footer-dots {
+    color: ${Colors.light.border};
+    font-size: 18px;
+    letter-spacing: 8px;
   }
   h1.reader-title {
     font-size: 24px;
@@ -116,6 +126,9 @@ function buildReaderHtml(
   <h1 class="reader-title">${escapeHtml(title)}</h1>
   ${byline ? `<div class="reader-byline">${escapeHtml(byline)}</div>` : ""}
   ${content}
+  <footer class="reader-footer">
+    <div class="reader-footer-dots">• • •</div>
+  </footer>
 </body>
 </html>`;
 }

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -237,6 +238,47 @@ export default function ArticleScreen() {
   const atBottomRef = useRef(false);
   const closeBtnAnim = useRef(new Animated.Value(0)).current;
 
+  const dragY = useRef(new Animated.Value(0)).current;
+  const handleBackRef = useRef<() => void>(() => {});
+
+  const dismissPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => atBottomRef.current && gs.dy < -8,
+      onPanResponderGrant: () => {
+        dragY.stopAnimation();
+      },
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy < 0) dragY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy < -100 || gs.vy < -0.5) {
+          Animated.timing(dragY, {
+            toValue: -Dimensions.get("window").height,
+            duration: 220,
+            useNativeDriver: true,
+          }).start(() => {
+            handleBackRef.current();
+            dragY.setValue(0);
+          });
+        } else {
+          Animated.spring(dragY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 12,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragY, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
   const isReaderMode = !liveMode;
 
   // Ensure highlight fires on the article card regardless of how we exit
@@ -365,6 +407,8 @@ export default function ArticleScreen() {
     router.back();
   }, [router, id]);
 
+  handleBackRef.current = handleBack;
+
   const toggleMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     isOnOriginalPage.current = true;
@@ -399,6 +443,7 @@ export default function ArticleScreen() {
   const injectedJS = buildInjectedJS(savedProgress, article.url, isReaderMode);
 
   return (
+    <Animated.View style={[{ flex: 1 }, { transform: [{ translateY: dragY }] }]}>
     <View style={styles.container}>
       {readerLoading && !liveMode ? (
         <View style={[styles.loadingContainer, { marginTop: barHeight }]}>
@@ -491,7 +536,9 @@ export default function ArticleScreen() {
       </View>
 
       {/* Bottom close button — slides in at 2/3 screen height when reader reaches the end */}
+      {/* pointerEvents="auto" lets the PanResponder steal upward drags from the Pressable child */}
       <Animated.View
+        {...dismissPanResponder.panHandlers}
         style={[
           styles.closeBtnContainer,
           { top: Dimensions.get("window").height * (2 / 3) - 48 },
@@ -513,7 +560,7 @@ export default function ArticleScreen() {
             ],
           },
         ]}
-        pointerEvents={atBottom ? "box-none" : "none"}
+        pointerEvents={atBottom ? "auto" : "none"}
       >
         <Pressable
           onPress={handleBack}
@@ -524,6 +571,7 @@ export default function ArticleScreen() {
         </Pressable>
       </Animated.View>
     </View>
+    </Animated.View>
   );
 }
 

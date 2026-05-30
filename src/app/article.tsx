@@ -191,19 +191,27 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMo
   `;
 }
 
-async function fetchAndExtract(url: string, storedContent?: string): Promise<string | null> {
-  let html: string;
-  if (storedContent) {
-    html = storedContent;
-  } else {
-    const response = await fetch(url);
-    html = await response.text();
-  }
+async function tryExtract(html: string, url: string): Promise<string | null> {
   const { document } = parseHTML(html);
   const reader = new Readability(document as unknown as Document);
   const result = reader.parse();
   if (!result?.content || result.content.length < 100) return null;
   return buildReaderHtml(result.title ?? "", result.byline ?? null, result.content, url);
+}
+
+async function fetchAndExtract(url: string, storedContent?: string): Promise<string | null> {
+  if (storedContent) {
+    const fromStored = await tryExtract(storedContent, url);
+    if (fromStored) return fromStored;
+    // Stored RSS content was too sparse (teaser/excerpt) — fall through to URL fetch
+  }
+  try {
+    const response = await fetch(url);
+    const html = await response.text();
+    return tryExtract(html, url);
+  } catch {
+    return null;
+  }
 }
 
 export default function ArticleScreen() {

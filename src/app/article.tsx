@@ -243,7 +243,7 @@ export default function ArticleScreen() {
 
   const dismissPanResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponder: () => atBottomRef.current,
       onMoveShouldSetPanResponder: (_, gs) => atBottomRef.current && gs.dy < -8,
       onPanResponderGrant: () => {
         dragY.stopAnimation();

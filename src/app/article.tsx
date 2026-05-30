@@ -1,9 +1,7 @@
-import { Readability } from "@mozilla/readability";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { parseHTML } from "linkedom";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,105 +20,10 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
 import { setLastOpenedArticle } from "@/lib/last-opened-article";
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function buildReaderHtml(
-  title: string,
-  byline: string | null,
-  content: string,
-  articleUrl: string
-): string {
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<base href="${escapeHtml(articleUrl)}">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: ${Colors.light.background};
-    color: ${Colors.light.text};
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 18px;
-    line-height: 1.75;
-    padding: 24px 20px 120px;
-    max-width: 680px;
-    margin: 0 auto;
-  }
-  h1.reader-title {
-    font-size: 24px;
-    line-height: 1.3;
-    margin-bottom: 10px;
-    font-family: Georgia, serif;
-    font-weight: bold;
-  }
-  .reader-byline {
-    color: ${Colors.light.textSecondary};
-    font-size: 14px;
-    margin-bottom: 28px;
-    font-family: -apple-system, sans-serif;
-    border-bottom: 1px solid ${Colors.light.border};
-    padding-bottom: 20px;
-  }
-  h2 { font-size: 20px; margin: 28px 0 12px; line-height: 1.3; }
-  h3 { font-size: 18px; margin: 24px 0 10px; line-height: 1.3; }
-  h4, h5, h6 { font-size: 16px; margin: 20px 0 8px; }
-  p { margin-bottom: 18px; }
-  a { color: ${Colors.light.accent}; text-decoration: none; }
-  img { max-width: 100%; height: auto; border-radius: 4px; margin: 16px 0; display: block; }
-  blockquote {
-    border-left: 3px solid ${Colors.light.border};
-    padding-left: 16px;
-    color: ${Colors.light.textSecondary};
-    margin: 20px 0;
-    font-style: italic;
-  }
-  pre {
-    background: ${Colors.light.surfaceAlt};
-    padding: 16px;
-    border-radius: 6px;
-    overflow-x: auto;
-    margin-bottom: 18px;
-  }
-  code {
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    background: ${Colors.light.surfaceAlt};
-    padding: 2px 5px;
-    border-radius: 3px;
-  }
-  pre code { background: none; padding: 0; font-size: 13px; }
-  ul, ol { padding-left: 24px; margin-bottom: 18px; }
-  li { margin-bottom: 6px; }
-  figure { margin: 20px 0; }
-  figcaption {
-    font-size: 13px;
-    color: ${Colors.light.textSecondary};
-    margin-top: 8px;
-    text-align: center;
-    font-family: -apple-system, sans-serif;
-  }
-  hr { border: none; border-top: 1px solid ${Colors.light.border}; margin: 28px 0; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 15px; }
-  th, td { border: 1px solid ${Colors.light.border}; padding: 8px 10px; }
-  th { background: ${Colors.light.surfaceAlt}; font-weight: 600; }
-  .hidden, [hidden] { display: none !important; }
-</style>
-</head>
-<body>
-  <h1 class="reader-title">${escapeHtml(title)}</h1>
-  ${byline ? `<div class="reader-byline">${escapeHtml(byline)}</div>` : ""}
-  ${content}
-</body>
-</html>`;
-}
+import {
+  fetchAndExtract,
+  loadPrefetchCache,
+} from "@/utils/article-prefetch";
 
 // Injected into the page to report scroll progress and detect overscroll-to-close.
 function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMode: boolean): string {
@@ -179,29 +82,6 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMo
   `;
 }
 
-async function tryExtract(html: string, url: string): Promise<string | null> {
-  const { document } = parseHTML(html);
-  const reader = new Readability(document as unknown as Document);
-  const result = reader.parse();
-  if (!result?.content || result.content.length < 100) return null;
-  return buildReaderHtml(result.title ?? "", result.byline ?? null, result.content, url);
-}
-
-async function fetchAndExtract(url: string, storedContent?: string): Promise<string | null> {
-  if (storedContent) {
-    const fromStored = await tryExtract(storedContent, url);
-    if (fromStored) return fromStored;
-    // Stored RSS content was too sparse (teaser/excerpt) — fall through to URL fetch
-  }
-  try {
-    const response = await fetch(url);
-    const html = await response.text();
-    return tryExtract(html, url);
-  } catch {
-    return null;
-  }
-}
-
 export default function ArticleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -219,6 +99,7 @@ export default function ArticleScreen() {
   const initialLiveMode = savedMode !== undefined ? savedMode : !feedReaderMode;
 
   const [readerHtml, setReaderHtml] = useState<string | null>(null);
+  const [cachedRawHtml, setCachedRawHtml] = useState<string | null>(null);
   const [readerLoading, setReaderLoading] = useState(true);
   const [liveMode, setLiveMode] = useState(initialLiveMode);
 
@@ -253,27 +134,46 @@ export default function ArticleScreen() {
 
     setReaderLoading(true);
     setReaderHtml(null);
+    setCachedRawHtml(null);
 
-    fetchAndExtract(article.url, article.content)
-      .then((html) => {
+    const run = async () => {
+      // Check prefetch cache first (fast local read)
+      try {
+        const cache = await loadPrefetchCache();
+        if (cancelled) return;
+        const entry = cache[article.id];
+        if (entry?.readerHtml) {
+          setReaderHtml(entry.readerHtml);
+          setReaderLoading(false);
+          return;
+        }
+        if (entry?.rawHtml) {
+          setCachedRawHtml(entry.rawHtml);
+          setReaderLoading(false);
+          return;
+        }
+      } catch {}
+
+      if (cancelled) return;
+
+      // Fall back to on-demand fetch
+      try {
+        const html = await fetchAndExtract(article.url, article.content);
         if (cancelled) return;
         if (html) {
           setReaderHtml(html);
         } else {
-          // Readability couldn't parse — fall back to live
           setLiveMode(true);
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setLiveMode(true);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setReaderLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
+      }
     };
+
+    run();
+    return () => { cancelled = true; };
   }, [article?.url]);
 
   const handleNavigationStateChange = useCallback(
@@ -399,7 +299,9 @@ export default function ArticleScreen() {
   const barHeight = barTop + 48;
 
   const webviewSource = liveMode
-    ? { uri: article.url }
+    ? cachedRawHtml
+      ? { html: cachedRawHtml, baseUrl: article.url }
+      : { uri: article.url }
     : readerHtml
       ? { html: readerHtml }
       : null;

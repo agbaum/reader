@@ -53,6 +53,8 @@ src/
     colors.ts             # Warm beige/brown palette
   lib/
     last-opened-article.ts  # Transient state for return-to-list highlight
+  utils/
+    article-prefetch.ts     # Shared HTML building + background prefetch cache logic
 ```
 
 ---
@@ -117,6 +119,7 @@ Articles expire at their TTL regardless of read/progress status. Articles that w
 | `rss_progress_v2` | `Record<id, number>` — live scroll progress |
 | `rss_reader_progress_v2` | `Record<id, number>` — reader scroll progress |
 | `rss_dismissed_urls_v3` | `Record<url, {feedId, ts}>` — per-feed minimum of 50 kept regardless of age; older entries from deleted feeds expire after 14 days |
+| `rss_prefetch_cache_v1` | `Record<id, PrefetchEntry>` — pre-fetched article content keyed by article ID |
 
 No migrations exist. Changing a key name drops its data.
 
@@ -368,15 +371,32 @@ User taps +
 User taps ArticleCard
   → useOpenArticle: haptic + navigate to /article?id=…
   → article.tsx mounts
-  → Fetch URL + run Readability
-    → success: render styled HTML in reader WebView
-    → fail: fall back to live WebView
+  → Check rss_prefetch_cache_v1 for pre-fetched content
+    → cache hit (readerHtml): render immediately, no network
+    → cache hit (rawHtml, live-mode feed): render from cached HTML with baseUrl
+    → cache miss: fetch URL + run Readability
+      → success: render styled HTML in reader WebView
+      → fail: fall back to live WebView (uri source)
   → Injected JS tracks scroll %
   → Progress saved on every scroll
   → At ≥ 90%: markAsRead()
   → User closes
     → setLastOpenedArticle(id, wasRead)
     → Today screen highlights the card
+```
+
+### Background prefetch
+
+```
+After each refreshFeeds() / initial load refresh
+  → runPrefetch(articles, feeds)  [fire and forget]
+    → Load existing rss_prefetch_cache_v1
+    → Remove stale entries (IDs not in current article list)
+    → For each non-dismissed article not already cached:
+        reader-mode feed → fetch + Readability → store readerHtml
+        live-mode feed   → fetch raw HTML → store rawHtml
+      (12s timeout per article, 200ms delay between requests)
+    → Save to AsyncStorage after each article
 ```
 
 ### Background refresh
@@ -388,6 +408,7 @@ App becomes active (AppState or launch)
     → New articles merged
     → Expired articles pruned
     → Dismissed URL cache cleaned (> 14 days for deleted-feed entries)
+    → runPrefetch() fired in background
   → Every 60s: expiry check timer fires
 ```
 

@@ -49,19 +49,9 @@ function buildReaderHtml(
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 18px;
     line-height: 1.75;
-    padding: 24px 20px 0;
+    padding: 24px 20px 120px;
     max-width: 680px;
     margin: 0 auto;
-  }
-  .reader-footer {
-    margin-top: 48px;
-    padding-bottom: 120px;
-    text-align: center;
-  }
-  .reader-footer-dots {
-    color: ${Colors.light.border};
-    font-size: 18px;
-    letter-spacing: 8px;
   }
   h1.reader-title {
     font-size: 24px;
@@ -127,9 +117,6 @@ function buildReaderHtml(
   <h1 class="reader-title">${escapeHtml(title)}</h1>
   ${byline ? `<div class="reader-byline">${escapeHtml(byline)}</div>` : ""}
   ${content}
-  <footer class="reader-footer">
-    <div class="reader-footer-dots">• • •</div>
-  </footer>
 </body>
 </html>`;
 }
@@ -244,7 +231,6 @@ export default function ArticleScreen() {
 
   const [atBottom, setAtBottom] = useState(false);
   const atBottomRef = useRef(false);
-  const closeBtnAnim = useRef(new Animated.Value(0)).current;
 
   const dragY = useRef(new Animated.Value(0)).current;
   const handleBackRef = useRef<() => void>(() => {});
@@ -387,19 +373,12 @@ export default function ArticleScreen() {
         if (newAtBottom !== atBottomRef.current) {
           atBottomRef.current = newAtBottom;
           setAtBottom(newAtBottom);
-          Animated.spring(closeBtnAnim, {
-            toValue: newAtBottom ? 1 : 0,
-            useNativeDriver: true,
-            tension: 120,
-            friction: 8,
-            clamp: true,
-          }).start();
         }
       } catch {
         // ignore malformed messages
       }
     },
-    [id, isReaderMode, markAsRead, saveScrollProgress, saveReaderScrollProgress, progressAnim, closeBtnAnim]
+    [id, isReaderMode, markAsRead, saveScrollProgress, saveReaderScrollProgress, progressAnim]
   );
 
   const openInBrowser = useCallback(() => {
@@ -543,41 +522,12 @@ export default function ArticleScreen() {
         </View>
       </View>
 
-      {/* Bottom close button — slides in at 2/3 screen height when reader reaches the end */}
-      {/* pointerEvents="auto" lets the PanResponder steal upward drags from the Pressable child */}
-      <Animated.View
+      {/* Invisible swipe-to-close zone — active when article is fully scrolled */}
+      <View
         {...dismissPanResponder.panHandlers}
-        style={[
-          styles.closeBtnContainer,
-          { top: Dimensions.get("window").height * (2 / 3) - 48 },
-          {
-            opacity: closeBtnAnim,
-            transform: [
-              {
-                translateY: closeBtnAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [60, 0],
-                }),
-              },
-              {
-                scale: closeBtnAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 1],
-                }),
-              },
-            ],
-          },
-        ]}
         pointerEvents={atBottom ? "auto" : "none"}
-      >
-        <Pressable
-          onPress={handleBack}
-          hitSlop={12}
-          style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.5 }]}
-        >
-          <Feather name="x" size={48} color={Colors.light.accent} />
-        </Pressable>
-      </Animated.View>
+        style={styles.swipeZone}
+      />
     </View>
     </Animated.View>
   );
@@ -646,25 +596,11 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
   },
-  closeBtnContainer: {
+  swipeZone: {
     position: "absolute",
+    bottom: 0,
     left: 0,
     right: 0,
-    alignItems: "center",
-  },
-  closeBtn: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: Colors.light.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.light.border,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    height: 120,
   },
 });

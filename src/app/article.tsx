@@ -231,6 +231,7 @@ export default function ArticleScreen() {
   const isOnOriginalPage = useRef(true);
 
   const [atBottom, setAtBottom] = useState(false);
+  const atBottomSV = useSharedValue(false);
 
   const dragY = useSharedValue(0);
   const animatedStyle = useAnimatedStyle(() => ({
@@ -333,7 +334,9 @@ export default function ArticleScreen() {
           markAsRead(id);
         }
 
-        setAtBottom(p >= 0.99);
+        const newAtBottom = p >= 0.99;
+        atBottomSV.value = newAtBottom;
+        setAtBottom(newAtBottom);
       } catch {
         // ignore malformed messages
       }
@@ -358,10 +361,10 @@ export default function ArticleScreen() {
     .activeOffsetY([-8, Number.MAX_VALUE])
     .enabled(atBottom)
     .onUpdate((e) => {
-      if (e.translationY < 0) dragY.value = e.translationY;
+      if (atBottomSV.value && e.translationY < 0) dragY.value = e.translationY;
     })
     .onEnd((e) => {
-      if (e.translationY < -100 || e.velocityY < -500) {
+      if (atBottomSV.value && (e.translationY < -100 || e.velocityY < -500)) {
         dragY.value = withTiming(
           -Dimensions.get("window").height,
           { duration: 220 },

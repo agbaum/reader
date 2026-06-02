@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
-  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -17,6 +16,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
+import ReAnimated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
@@ -230,48 +231,11 @@ export default function ArticleScreen() {
   const isOnOriginalPage = useRef(true);
 
   const [atBottom, setAtBottom] = useState(false);
-  const atBottomRef = useRef(false);
 
-  const dragY = useRef(new Animated.Value(0)).current;
-  const handleBackRef = useRef<() => void>(() => {});
-
-  const dismissPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => atBottomRef.current,
-      onMoveShouldSetPanResponder: (_, gs) => atBottomRef.current && gs.dy < -8,
-      onPanResponderGrant: () => {
-        dragY.stopAnimation();
-      },
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy < 0) dragY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy < -100 || gs.vy < -0.5) {
-          Animated.timing(dragY, {
-            toValue: -Dimensions.get("window").height,
-            duration: 220,
-            useNativeDriver: true,
-          }).start(() => {
-            handleBackRef.current();
-            dragY.setValue(0);
-          });
-        } else {
-          Animated.spring(dragY, {
-            toValue: 0,
-            useNativeDriver: true,
-            tension: 100,
-            friction: 12,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        Animated.spring(dragY, {
-          toValue: 0,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
+  const dragY = useSharedValue(0);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: dragY.value }],
+  }));
 
   const isReaderMode = !liveMode;
 
@@ -369,11 +333,7 @@ export default function ArticleScreen() {
           markAsRead(id);
         }
 
-        const newAtBottom = p >= 0.99;
-        if (newAtBottom !== atBottomRef.current) {
-          atBottomRef.current = newAtBottom;
-          setAtBottom(newAtBottom);
-        }
+        setAtBottom(p >= 0.99);
       } catch {
         // ignore malformed messages
       }
@@ -394,7 +354,25 @@ export default function ArticleScreen() {
     router.back();
   }, [router, id]);
 
-  handleBackRef.current = handleBack;
+  const dismissGesture = Gesture.Pan()
+    .activeOffsetY([-8, Number.MAX_VALUE])
+    .enabled(atBottom)
+    .onUpdate((e) => {
+      if (e.translationY < 0) dragY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      if (e.translationY < -100 || e.velocityY < -500) {
+        dragY.value = withTiming(
+          -Dimensions.get("window").height,
+          { duration: 220 },
+          (finished) => {
+            if (finished) runOnJS(handleBack)();
+          }
+        );
+      } else {
+        dragY.value = withSpring(0, { damping: 20, stiffness: 200 });
+      }
+    });
 
   const toggleMode = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -430,7 +408,8 @@ export default function ArticleScreen() {
   const injectedJS = buildInjectedJS(savedProgress, article.url, isReaderMode);
 
   return (
-    <Animated.View style={[{ flex: 1 }, { transform: [{ translateY: dragY }] }]}>
+    <GestureDetector gesture={dismissGesture}>
+    <ReAnimated.View style={[{ flex: 1 }, animatedStyle]}>
     <View style={styles.container}>
       {readerLoading && !liveMode ? (
         <View style={[styles.loadingContainer, { marginTop: barHeight }]}>
@@ -522,14 +501,9 @@ export default function ArticleScreen() {
         </View>
       </View>
 
-      {/* Invisible swipe-to-close zone — active when article is fully scrolled */}
-      <View
-        {...dismissPanResponder.panHandlers}
-        pointerEvents={atBottom ? "auto" : "none"}
-        style={styles.swipeZone}
-      />
     </View>
-    </Animated.View>
+    </ReAnimated.View>
+    </GestureDetector>
   );
 }
 
@@ -595,12 +569,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
-  },
-  swipeZone: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 120,
   },
 });

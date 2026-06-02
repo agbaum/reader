@@ -8,7 +8,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   Pressable,
   StyleSheet,
   Text,
@@ -365,13 +364,8 @@ export default function ArticleScreen() {
     })
     .onEnd((e) => {
       if (atBottomSV.value && (e.translationY < -100 || e.velocityY < -500)) {
-        dragY.value = withTiming(
-          -Dimensions.get("window").height,
-          { duration: 220 },
-          (finished) => {
-            if (finished) runOnJS(handleBack)();
-          }
-        );
+        dragY.value = 0;
+        runOnJS(handleBack)();
       } else {
         dragY.value = withSpring(0, { damping: 20, stiffness: 200 });
       }

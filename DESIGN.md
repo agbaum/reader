@@ -221,7 +221,7 @@ Modal (slide from bottom) for reading articles. Two modes:
 - Full original page styling preserved
 
 **Shared behaviors:**
-- Top bar: feed title (uppercase), close (X), mode toggle, open-in-browser
+- Top bar: feed title (uppercase), close (X), mode toggle, open-in-browser, debug info (help-circle icon → opens `ArticleDebugSheet`)
 - Progress bar: 2px colored stripe at top showing scroll %
 - Scroll tracking: injected JS reports `scrollTop / scrollHeight` back to RN
 - Auto-mark read at ≥ 90% combined progress (live + reader)
@@ -238,7 +238,7 @@ Modal (slide from bottom) for reading articles. Two modes:
 
 ### ArticleCard
 
-The core list item. Handles display and swipe gestures.
+The core list item. Handles display, swipe-to-dismiss, and long-press-to-reset-expiry.
 
 **Display:**
 - Left edge: expiry bar (color-coded: red=6h, purple=18h, blue=3d, green=7d)
@@ -246,15 +246,16 @@ The core list item. Handles display and swipe gestures.
 - Title bold if unread, light if read
 - Feed name, relative time, description preview (2 lines), thumbnail, author
 
-**Swipe gesture (horizontal pan):**
+**Swipe gesture (horizontal pan) — dismiss only:**
 
 | Distance | Behavior |
 |---|---|
-| < 50pt | Elastic drag, snaps back |
-| ≥ 50pt | Haptic + "Reset expiry" action revealed |
-| ≥ 110pt | Haptic + switches to "Dismiss" action |
-| Release at ≥ 110pt | Triggers action, animates card off-screen |
-| Release at 50–110pt | Springs back with haptic |
+| < 110pt | Elastic drag, snaps back |
+| ≥ 110pt | Haptic + "Dismiss" action revealed |
+| Release at ≥ 110pt | Triggers dismiss, animates card off-screen |
+| Release at < 110pt | Springs back |
+
+**Long press:** resets the article's expiry timer (`resetArticleExpiry`), bumping it back to the top of its expiry window. Replaces the old debug-sheet trigger — debug info now lives behind the help icon in the reader pane's top bar.
 
 **Animations:**
 - Highlight pulse: 120ms fade in, 1800ms fade out
@@ -317,7 +318,7 @@ Sidebar-embedded panels (nested modals). FeedsPanel mirrors the Feeds screen. Re
 
 ### ArticleDebugSheet
 
-Dev-only tool (long-press on any article card). Shows all article fields: state, timestamps, content, URLs, IDs, expiry status with countdown.
+Dev-only tool, opened via the help-circle icon in the reader pane's top bar. Shows all article fields: state, timestamps, content, URLs, IDs, expiry status with countdown.
 
 ---
 

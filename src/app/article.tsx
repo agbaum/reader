@@ -16,6 +16,7 @@ import { WebView, WebViewMessageEvent } from "react-native-webview";
 import ReAnimated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
+import { ArticleDebugSheet } from "@/components/ArticleDebugSheet";
 import Colors from "@/constants/colors";
 import { useFeeds } from "@/context/FeedsContext";
 import { setLastOpenedArticle } from "@/lib/last-opened-article";
@@ -101,6 +102,7 @@ export default function ArticleScreen() {
   const [cachedRawHtml, setCachedRawHtml] = useState<string | null>(null);
   const [readerLoading, setReaderLoading] = useState(true);
   const [liveMode, setLiveMode] = useState(initialLiveMode);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   const readerProgressRef = useRef(savedReaderProgress);
   const liveProgressRef = useRef(savedLiveProgress);
@@ -250,6 +252,11 @@ export default function ArticleScreen() {
     }
   }, [article?.url]);
 
+  const openDebug = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDebugOpen(true);
+  }, []);
+
   const handleBack = useCallback(() => {
     if (id) setLastOpenedArticle(id, hasMarkedRead.current);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -372,6 +379,13 @@ export default function ArticleScreen() {
             >
               <Feather name="external-link" size={18} color={Colors.light.textSecondary} />
             </Pressable>
+            <Pressable
+              onPress={openDebug}
+              hitSlop={8}
+              style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
+            >
+              <Feather name="help-circle" size={18} color={Colors.light.textSecondary} />
+            </Pressable>
           </View>
         </View>
 
@@ -400,6 +414,10 @@ export default function ArticleScreen() {
         </View>
       </View>
 
+      <ArticleDebugSheet
+        article={debugOpen ? article : null}
+        onClose={() => setDebugOpen(false)}
+      />
     </View>
     </ReAnimated.View>
     </GestureDetector>

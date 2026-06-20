@@ -6,10 +6,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  BackHandler,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
@@ -115,10 +117,16 @@ export default function ArticleScreen() {
   const [atBottom, setAtBottom] = useState(false);
   const atBottomSV = useSharedValue(false);
 
-  const dragY = useSharedValue(0);
+  const { height: screenHeight } = useWindowDimensions();
+  const dragY = useSharedValue(screenHeight);
+  const isClosingRef = useRef(false);
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: dragY.value }],
   }));
+
+  useEffect(() => {
+    dragY.value = withTiming(0, { duration: 220 });
+  }, []);
 
   const isReaderMode = !liveMode;
 
@@ -263,6 +271,22 @@ export default function ArticleScreen() {
     router.back();
   }, [router, id]);
 
+  const dismiss = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    dragY.value = withTiming(-screenHeight, { duration: 220 }, (finished) => {
+      if (finished) runOnJS(handleBack)();
+    });
+  }, [dragY, screenHeight, handleBack]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      dismiss();
+      return true;
+    });
+    return () => sub.remove();
+  }, [dismiss]);
+
   const dismissGesture = Gesture.Pan()
     .activeOffsetY([-8, Number.MAX_VALUE])
     .enabled(atBottom)
@@ -271,8 +295,7 @@ export default function ArticleScreen() {
     })
     .onEnd((e) => {
       if (atBottomSV.value && (e.translationY < -100 || e.velocityY < -500)) {
-        dragY.value = 0;
-        runOnJS(handleBack)();
+        runOnJS(dismiss)();
       } else {
         dragY.value = withSpring(0, { damping: 20, stiffness: 200 });
       }
@@ -338,6 +361,10 @@ export default function ArticleScreen() {
         />
       ) : null}
 
+      {/* Bottom card edge */}
+      <View style={styles.bottomEdgeShade} pointerEvents="none" />
+      <View style={styles.bottomEdgeCurve} pointerEvents="none" />
+
       {/* Top bar */}
       <View
         style={[
@@ -347,7 +374,7 @@ export default function ArticleScreen() {
       >
         <View style={styles.topBarContent}>
           <Pressable
-            onPress={handleBack}
+            onPress={dismiss}
             hitSlop={8}
             style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
           >
@@ -486,5 +513,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
+  },
+  bottomEdgeShade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 24,
+    backgroundColor: Colors.light.surfaceAlt,
+  },
+  bottomEdgeCurve: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 8,
+    height: 16,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    borderBottomWidth: 1.5,
+    borderColor: Colors.light.border,
   },
 });

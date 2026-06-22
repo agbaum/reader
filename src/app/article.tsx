@@ -46,7 +46,7 @@ function buildReaderHtml(
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: ${Colors.light.background};
+    background: ${Colors.light.card};
     color: ${Colors.light.text};
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 18px;
@@ -534,11 +534,11 @@ export default function ArticleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
   },
   webview: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
   },
   loadingContainer: {
     flex: 1,
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.light.border,
   },
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 24,
-    backgroundColor: Colors.light.surfaceAlt,
+    backgroundColor: Colors.light.background,
   },
   bottomEdgeCurve: {
     position: "absolute",

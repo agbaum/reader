@@ -1,8 +1,9 @@
 const Colors = {
   light: {
-    background: "#F5F0E8",
+    background: "#EDE8DC",
+    card: "#F5F0E8",
     surface: "#FDFAF5",
-    surfaceAlt: "#EDE8DC",
+    surfaceAlt: "#E5E0D0",
     border: "#D6CFC3",
     text: "#1C1814",
     textSecondary: "#6B6059",

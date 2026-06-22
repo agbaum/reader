@@ -294,7 +294,7 @@ export default function ArticleScreen() {
       if (atBottomSV.value && e.translationY < 0) dragY.value = e.translationY;
     })
     .onEnd((e) => {
-      if (atBottomSV.value && (e.translationY < -100 || e.velocityY < -500)) {
+      if (atBottomSV.value && (e.translationY < -100 || (e.translationY < -50 && e.velocityY < -500))) {
         runOnJS(dismiss)();
       } else {
         dragY.value = withSpring(0, { damping: 20, stiffness: 200 });
@@ -454,11 +454,11 @@ export default function ArticleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
   },
   webview: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
   },
   loadingContainer: {
     flex: 1,
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.card,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.light.border,
   },
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 24,
-    backgroundColor: Colors.light.surfaceAlt,
+    backgroundColor: Colors.light.background,
   },
   bottomEdgeCurve: {
     position: "absolute",
@@ -528,6 +528,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 8,
     height: 16,
+    backgroundColor: Colors.light.card,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
     borderBottomWidth: 1.5,

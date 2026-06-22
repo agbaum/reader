@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   card: {
-    backgroundColor: Colors.light.surface,
+    backgroundColor: Colors.light.card,
     borderRadius: 14,
     paddingTop: 16,
     paddingBottom: 16,

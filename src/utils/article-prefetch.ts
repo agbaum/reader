@@ -40,7 +40,7 @@ export function buildReaderHtml(
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: ${Colors.light.background};
+    background: ${Colors.light.card};
     color: ${Colors.light.text};
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 18px;

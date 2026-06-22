@@ -10,6 +10,8 @@ import React, {
 } from "react";
 import { AppState } from "react-native";
 
+import { runPrefetch } from "@/utils/article-prefetch";
+
 export type ExpiryBucket = "6h" | "18h" | "3d" | "7d";
 
 export const EXPIRY_DURATIONS: Record<ExpiryBucket, number> = {
@@ -544,6 +546,7 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           await AsyncStorage.setItem(FEEDS_KEY, JSON.stringify(loadedFeeds));
           await AsyncStorage.setItem(ARTICLES_KEY, JSON.stringify(sorted));
           setIsRefreshing(false);
+          runPrefetch(sorted, loadedFeeds).catch(console.error);
         }
       } catch (e) {
         console.error("Load error:", e);
@@ -856,6 +859,8 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
         feeds.map(async (feed) => ({ feed, result: await fetchFeedData(feed.url) }))
       );
 
+      let articlesForPrefetch: Article[] = [];
+
       setArticles((currentArticles) => {
         let merged = [...currentArticles];
         for (const { feed, result } of results) {
@@ -898,9 +903,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           dismissedUrlsRef.current = pruned;
           AsyncStorage.setItem(DISMISSED_URLS_KEY, JSON.stringify([...pruned.entries()]));
         }
+        articlesForPrefetch = sorted;
         return sorted;
       });
 
+      let feedsForPrefetch: Feed[] = feeds;
       setFeeds((currentFeeds) => {
         const updated = currentFeeds.map((f) => {
           const match = results.find((r) => r.feed.id === f.id);
@@ -908,8 +915,11 @@ export function FeedsProvider({ children }: { children: ReactNode }) {
           return { ...f, url: match.result.canonicalUrl, title: match.result.feed.title ?? f.title, lastFetched: Date.now() };
         });
         AsyncStorage.setItem(FEEDS_KEY, JSON.stringify(updated));
+        feedsForPrefetch = updated;
         return updated;
       });
+
+      runPrefetch(articlesForPrefetch, feedsForPrefetch).catch(console.error);
     } finally {
       setIsRefreshing(false);
     }

@@ -53,6 +53,8 @@ src/
     colors.ts             # Warm beige/brown palette
   lib/
     last-opened-article.ts  # Transient state for return-to-list highlight
+  utils/
+    article-prefetch.ts     # Shared HTML building + background prefetch cache logic
 ```
 
 ---
@@ -117,6 +119,7 @@ Articles expire at their TTL regardless of read/progress status. Articles that w
 | `rss_progress_v2` | `Record<id, number>` — live scroll progress |
 | `rss_reader_progress_v2` | `Record<id, number>` — reader scroll progress |
 | `rss_dismissed_urls_v3` | `Record<url, {feedId, ts}>` — per-feed minimum of 50 kept regardless of age; older entries from deleted feeds expire after 14 days |
+| `rss_prefetch_cache_v1` | `Record<id, PrefetchEntry>` — pre-fetched article content keyed by article ID |
 
 No migrations exist. Changing a key name drops its data.
 
@@ -218,7 +221,7 @@ Modal (slide from bottom) for reading articles. Two modes:
 - Full original page styling preserved
 
 **Shared behaviors:**
-- Top bar: feed title (uppercase), close (X), mode toggle, open-in-browser
+- Top bar: feed title (uppercase), close (X), mode toggle, open-in-browser, debug info (help-circle icon → opens `ArticleDebugSheet`)
 - Progress bar: 2px colored stripe at top showing scroll %
 - Scroll tracking: injected JS reports `scrollTop / scrollHeight` back to RN
 - Auto-mark read at ≥ 90% combined progress (live + reader)
@@ -235,7 +238,7 @@ Modal (slide from bottom) for reading articles. Two modes:
 
 ### ArticleCard
 
-The core list item. Handles display and swipe gestures.
+The core list item. Handles display, swipe-to-dismiss, and long-press-to-reset-expiry.
 
 **Display:**
 - Left edge: expiry bar (color-coded: red=6h, purple=18h, blue=3d, green=7d)
@@ -243,15 +246,16 @@ The core list item. Handles display and swipe gestures.
 - Title bold if unread, light if read
 - Feed name, relative time, description preview (2 lines), thumbnail, author
 
-**Swipe gesture (horizontal pan):**
+**Swipe gesture (horizontal pan) — dismiss only:**
 
 | Distance | Behavior |
 |---|---|
-| < 50pt | Elastic drag, snaps back |
-| ≥ 50pt | Haptic + "Reset expiry" action revealed |
-| ≥ 110pt | Haptic + switches to "Dismiss" action |
-| Release at ≥ 110pt | Triggers action, animates card off-screen |
-| Release at 50–110pt | Springs back with haptic |
+| < 110pt | Elastic drag, snaps back |
+| ≥ 110pt | Haptic + "Dismiss" action revealed |
+| Release at ≥ 110pt | Triggers dismiss, animates card off-screen |
+| Release at < 110pt | Springs back |
+
+**Long press:** resets the article's expiry timer (`resetArticleExpiry`), bumping it back to the top of its expiry window. Replaces the old debug-sheet trigger — debug info now lives behind the help icon in the reader pane's top bar.
 
 **Animations:**
 - Highlight pulse: 120ms fade in, 1800ms fade out
@@ -314,7 +318,7 @@ Sidebar-embedded panels (nested modals). FeedsPanel mirrors the Feeds screen. Re
 
 ### ArticleDebugSheet
 
-Dev-only tool (long-press on any article card). Shows all article fields: state, timestamps, content, URLs, IDs, expiry status with countdown.
+Dev-only tool, opened via the help-circle icon in the reader pane's top bar. Shows all article fields: state, timestamps, content, URLs, IDs, expiry status with countdown.
 
 ---
 
@@ -368,15 +372,32 @@ User taps +
 User taps ArticleCard
   → useOpenArticle: haptic + navigate to /article?id=…
   → article.tsx mounts
-  → Fetch URL + run Readability
-    → success: render styled HTML in reader WebView
-    → fail: fall back to live WebView
+  → Check rss_prefetch_cache_v1 for pre-fetched content
+    → cache hit (readerHtml): render immediately, no network
+    → cache hit (rawHtml, live-mode feed): render from cached HTML with baseUrl
+    → cache miss: fetch URL + run Readability
+      → success: render styled HTML in reader WebView
+      → fail: fall back to live WebView (uri source)
   → Injected JS tracks scroll %
   → Progress saved on every scroll
   → At ≥ 90%: markAsRead()
   → User closes
     → setLastOpenedArticle(id, wasRead)
     → Today screen highlights the card
+```
+
+### Background prefetch
+
+```
+After each refreshFeeds() / initial load refresh
+  → runPrefetch(articles, feeds)  [fire and forget]
+    → Load existing rss_prefetch_cache_v1
+    → Remove stale entries (IDs not in current article list)
+    → For each non-dismissed article not already cached:
+        reader-mode feed → fetch + Readability → store readerHtml
+        live-mode feed   → fetch raw HTML → store rawHtml
+      (12s timeout per article, 200ms delay between requests)
+    → Save to AsyncStorage after each article
 ```
 
 ### Background refresh
@@ -388,6 +409,7 @@ App becomes active (AppState or launch)
     → New articles merged
     → Expired articles pruned
     → Dismissed URL cache cleaned (> 14 days for deleted-feed entries)
+    → runPrefetch() fired in background
   → Every 60s: expiry check timer fires
 ```
 

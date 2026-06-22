@@ -19,7 +19,7 @@
       "predictiveBackGestureEnabled": false,
       "usesCleartextTraffic": true,
       "package": "com.akpgreentree.reader",
-      "versionCode": 32
+      "versionCode": 33
     },
     "web": {
       "output": "static",

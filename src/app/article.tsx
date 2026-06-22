@@ -608,6 +608,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 8,
     height: 16,
+    backgroundColor: Colors.light.card,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
     borderBottomWidth: 1.5,

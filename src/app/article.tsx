@@ -387,7 +387,7 @@ export default function ArticleScreen() {
       if (atBottomSV.value && e.translationY < 0) dragY.value = e.translationY;
     })
     .onEnd((e) => {
-      if (atBottomSV.value && (e.translationY < -100 || e.velocityY < -500)) {
+      if (atBottomSV.value && (e.translationY < -100 || (e.translationY < -50 && e.velocityY < -500))) {
         runOnJS(dismiss)();
       } else {
         dragY.value = withSpring(0, { damping: 20, stiffness: 200 });

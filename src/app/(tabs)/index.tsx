@@ -252,7 +252,7 @@ export default function TodayScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.surfaceAlt,
   },
   list: {
     paddingBottom: 40,
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    backgroundColor: Colors.light.background,
+    backgroundColor: Colors.light.surfaceAlt,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.light.border,
   },
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: Colors.light.surfaceAlt,
+    backgroundColor: Colors.light.surface,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 4,

@@ -226,7 +226,7 @@ Modal (slide from bottom) for reading articles. Two modes:
 - Scroll tracking: injected JS reports `scrollTop / scrollHeight` back to RN
 - Auto-mark read at ≥ 90% combined progress (live + reader)
 - Scroll position restored on mount (multiple retry attempts for render timing)
-- **Overscroll-to-close**: when already at bottom, swipe up >60pt dismisses with animation
+- **Overscroll-to-close**: when already at bottom, swipe up >60pt dismisses with animation; closing duration scales with swipe velocity (clamped 100–280ms), so a fast fling closes quicker than a slow drag-release. The X button and hardware back button use the default 220ms since there's no swipe velocity to match.
 - **Link taps**: intercepted via `onShouldStartLoadWithRequest` — any link opens in an in-app browser overlay (`WebBrowser.openBrowserAsync`) rather than navigating the WebView. The article stays loaded underneath in both modes.
 
 **On exit:**

@@ -84,6 +84,10 @@ function buildInjectedJS(restoreProgress: number, articleUrl: string, isReaderMo
   `;
 }
 
+const DISMISS_DEFAULT_DURATION = 220;
+const DISMISS_MIN_DURATION = 100;
+const DISMISS_MAX_DURATION = 280;
+
 export default function ArticleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -271,10 +275,10 @@ export default function ArticleScreen() {
     router.back();
   }, [router, id]);
 
-  const dismiss = useCallback(() => {
+  const dismiss = useCallback((duration: number = DISMISS_DEFAULT_DURATION) => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
-    dragY.value = withTiming(-screenHeight, { duration: 220 }, (finished) => {
+    dragY.value = withTiming(-screenHeight, { duration }, (finished) => {
       if (finished) runOnJS(handleBack)();
     });
   }, [dragY, screenHeight, handleBack]);
@@ -295,7 +299,14 @@ export default function ArticleScreen() {
     })
     .onEnd((e) => {
       if (atBottomSV.value && (e.translationY < -100 || (e.translationY < -50 && e.velocityY < -500))) {
-        runOnJS(dismiss)();
+        // Match the closing animation's speed to how fast the user flung it.
+        const remaining = screenHeight + e.translationY;
+        const speed = Math.max(1, -e.velocityY);
+        const duration = Math.min(
+          DISMISS_MAX_DURATION,
+          Math.max(DISMISS_MIN_DURATION, (remaining / speed) * 1000)
+        );
+        runOnJS(dismiss)(duration);
       } else {
         dragY.value = withSpring(0, { damping: 20, stiffness: 200 });
       }
@@ -374,7 +385,7 @@ export default function ArticleScreen() {
       >
         <View style={styles.topBarContent}>
           <Pressable
-            onPress={dismiss}
+            onPress={() => dismiss()}
             hitSlop={8}
             style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
           >

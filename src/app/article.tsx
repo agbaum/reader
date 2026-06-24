@@ -275,21 +275,31 @@ export default function ArticleScreen() {
     router.back();
   }, [router, id]);
 
-  const dismiss = useCallback((duration: number = DISMISS_DEFAULT_DURATION) => {
+  const animateClose = useCallback((target: number, duration: number) => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
-    dragY.value = withTiming(-screenHeight, { duration }, (finished) => {
+    dragY.value = withTiming(target, { duration }, (finished) => {
       if (finished) runOnJS(handleBack)();
     });
-  }, [dragY, screenHeight, handleBack]);
+  }, [dragY, handleBack]);
+
+  // Swipe-up dismiss: continues off the top of the screen, in the direction of the swipe.
+  const dismissUp = useCallback((duration: number = DISMISS_DEFAULT_DURATION) => {
+    animateClose(-screenHeight, duration);
+  }, [animateClose, screenHeight]);
+
+  // X button / hardware back: slides back down, mirroring the open animation.
+  const dismissDown = useCallback(() => {
+    animateClose(screenHeight, DISMISS_DEFAULT_DURATION);
+  }, [animateClose, screenHeight]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      dismiss();
+      dismissDown();
       return true;
     });
     return () => sub.remove();
-  }, [dismiss]);
+  }, [dismissDown]);
 
   const dismissGesture = Gesture.Pan()
     .activeOffsetY([-8, Number.MAX_VALUE])
@@ -306,7 +316,7 @@ export default function ArticleScreen() {
           DISMISS_MAX_DURATION,
           Math.max(DISMISS_MIN_DURATION, (remaining / speed) * 1000)
         );
-        runOnJS(dismiss)(duration);
+        runOnJS(dismissUp)(duration);
       } else {
         dragY.value = withSpring(0, { damping: 20, stiffness: 200 });
       }
@@ -385,7 +395,7 @@ export default function ArticleScreen() {
       >
         <View style={styles.topBarContent}>
           <Pressable
-            onPress={() => dismiss()}
+            onPress={dismissDown}
             hitSlop={8}
             style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.5 }]}
           >

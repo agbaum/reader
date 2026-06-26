@@ -117,7 +117,16 @@ export function buildReaderHtml(
 </html>`;
 }
 
+// Vercel's bot-protection challenge page requires real browser JS execution to pass,
+// which a bare fetch() can never do. Readability would otherwise "successfully" extract
+// the checkpoint page's own text as if it were the article, so detect and reject it here.
+function isBotChallengePage(html: string): boolean {
+  const lower = html.toLowerCase();
+  return lower.includes("vercel security checkpoint") || (lower.includes("vercel") && lower.includes("verify your browser"));
+}
+
 async function tryExtract(html: string, url: string): Promise<string | null> {
+  if (isBotChallengePage(html)) return null;
   const { document } = parseHTML(html);
   const reader = new Readability(document as unknown as Document);
   const result = reader.parse();

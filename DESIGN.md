@@ -214,7 +214,7 @@ Modal (slide from bottom) for reading articles. Two modes:
 1. If `article.content` is set (HTML stored from feed), use that; otherwise fetch HTML from URL
 2. Run Mozilla Readability → extract `title`, `byline`, `content`
 3. Render extracted HTML in a `WebView` with injected CSS (serif fonts, proper spacing, styled blockquotes/code/images)
-4. If Readability fails or returns < 100 chars → auto-fallback to Live Mode
+4. If Readability fails, returns < 100 chars, or the fetched page is a bot-protection challenge page (e.g. Vercel's "Security Checkpoint", which requires real browser JS execution to pass and can't be solved by a bare `fetch()`) → auto-fallback to Live Mode
 
 #### Live Mode
 - Raw `WebView` pointing directly at article URL

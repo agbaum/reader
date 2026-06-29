@@ -96,7 +96,7 @@ const DISMISSED_URLS_KEY = "rss_dismissed_urls_v3";
 const ARTICLE_MODES_KEY = "rss_article_modes_v1";
 // Time-based cutoff for entries from deleted feeds (active feeds use per-feed minimum instead)
 const MAX_DISMISSED_AGE = 14 * 24 * 60 * 60 * 1000;
-const MAX_DISMISSED_PER_FEED = 50; // matches article cap per feed
+const MAX_DISMISSED_PER_FEED = 100; // matches article cap per feed
 
 type DismissedEntry = { feedId: string; ts: number };
 
@@ -283,7 +283,7 @@ async function fetchFeedData(
       itemsRaw = itemMatches;
     }
 
-    const articles: Partial<Article>[] = itemsRaw.slice(0, 50).map((item) => {
+    const articles: Partial<Article>[] = itemsRaw.slice(0, 100).map((item) => {
       let title = "";
       let link = "";
       let description = "";

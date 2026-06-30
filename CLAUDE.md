@@ -53,7 +53,7 @@ Read state and progress are stored separately from articles to allow fast update
 - **No backend.** Feed fetching happens on-device. Don't introduce a server unless there's a strong reason.
 - **Single context for all state.** `FeedsContext` handles feeds, articles, and read state. The app's data needs are simple enough that a query library would add overhead.
 - **Background refresh on launch.** The app loads from storage immediately, then silently refreshes all feeds. Don't break this pattern — instant display of cached content is intentional.
-- **Articles are capped at 50 per feed** to keep memory reasonable.
+- **Articles are capped at 100 per feed** to keep memory reasonable.
 - **Portrait-only.** Don't add landscape support.
 
 ## Known gaps (don't fix unless asked)

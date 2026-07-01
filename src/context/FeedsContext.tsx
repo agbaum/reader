@@ -156,6 +156,21 @@ function stripHtml(html: string): string {
   return decodeEntities(html?.replace(/<[^>]*>/g, "") ?? "").trim();
 }
 
+// Cap on stored per-article content. Applied after extractBodyContent, so the cap
+// covers article markup rather than <head>/<style> boilerplate. Keep this modest:
+// all articles persist as a single AsyncStorage row, and Android caps row reads at ~2MB.
+const MAX_CONTENT_LENGTH = 300_000;
+
+// Some feeds (e.g. beehiiv) put the full rendered email — doctype, <head>, huge
+// <style> blocks — in <content:encoded>. Keep only the body markup so descriptions
+// and stored reader content aren't dominated by CSS boilerplate.
+function extractBodyContent(html: string): string {
+  const body = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? html;
+  return body
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+}
+
 // Extracts the first substantial text block from HTML, skipping short nav/boilerplate lines.
 function extractDescription(html: string, limit = 300): string {
   if (!html) return "";
@@ -295,18 +310,20 @@ async function fetchFeedData(
       if (isAtom) {
         title = stripHtml(getTagContent(item, "title"));
         link = getAttr(item, "link", "href") || getTagContent(item, "link");
-        const rawDesc = getTagContent(item, "summary") || getTagContent(item, "content");
+        const rawDesc = extractBodyContent(
+          getTagContent(item, "summary") || getTagContent(item, "content")
+        );
         pubDate = getTagContent(item, "published") || getTagContent(item, "updated");
         author = getTagContent(item, "name") || getTagContent(item, "author");
         imageUrl = extractImageFromContent(rawDesc) ?? "";
         description = extractDescription(rawDesc);
-        if (rawDesc.includes("<") && rawDesc.length > 200) content = rawDesc.slice(0, 100000);
+        if (rawDesc.includes("<") && rawDesc.length > 200) content = rawDesc.slice(0, MAX_CONTENT_LENGTH);
       } else {
         title = stripHtml(getTagContent(item, "title"));
         link = getTagContent(item, "link");
         if (!link) link = getAttr(item, "link", "href");
-        const contentEncoded = getTagContent(item, "content:encoded");
-        const rawDesc = contentEncoded || getTagContent(item, "description");
+        const contentEncoded = extractBodyContent(getTagContent(item, "content:encoded"));
+        const rawDesc = contentEncoded || extractBodyContent(getTagContent(item, "description"));
         pubDate = getTagContent(item, "pubDate") || getTagContent(item, "dc:date");
         author = getTagContent(item, "author") || getTagContent(item, "dc:creator");
 
@@ -320,7 +337,7 @@ async function fetchFeedData(
           "";
 
         description = extractDescription(rawDesc);
-        if (rawDesc.includes("<") && rawDesc.length > 200) content = rawDesc.slice(0, 100000);
+        if (rawDesc.includes("<") && rawDesc.length > 200) content = rawDesc.slice(0, MAX_CONTENT_LENGTH);
       }
 
       const publishedAt = parsePubDate(pubDate);

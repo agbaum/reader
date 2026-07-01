@@ -85,7 +85,7 @@ src/
   url: string;
   title: string;
   description?: string;
-  content?: string;           // Raw HTML from feed's <content> / <content:encoded> (≤100KB); used by reader mode to avoid re-fetching the URL
+  content?: string;           // Body-only HTML from feed's <content> / <content:encoded> (≤300KB); used by reader mode to avoid re-fetching the URL
   author?: string;
   imageUrl?: string;
   publishedAt: number;        // Unix ms
@@ -163,6 +163,7 @@ No migrations exist. Changing a key name drops its data.
 
 - Direct HTTP fetch
 - Auto-upgrade HTTP → HTTPS on failure
+- Content normalization: feeds that embed a full HTML document in `<content:encoded>` (e.g. beehiiv's rendered email — doctype, `<head>`, large `<style>` blocks) are reduced to body-only markup with `<style>`/`<script>` blocks stripped, before deriving the description, image, and stored content (capped at 300KB)
 - Image extraction: tries `media:content`, `enclosure`, then inline `<img>` from content
 - Date parsing: handles multiple RFC formats + timezone normalization
 - Articles capped at 50 per feed
